@@ -26,191 +26,189 @@
 
 void Load_Drow_Dialog(void)
 {
-	LCD_Clear(WHITE);//ÇåÆÁ   
- 	POINT_COLOR=BLUE;//ÉèÖÃ×ÖÌåÎªÀ¶É« 
-	LCD_ShowString(lcddev.width-24,0,200,16,16,"RST");//ÏÔÊ¾ÇåÆÁÇøÓò
-  	POINT_COLOR=RED;//ÉèÖÃ»­±ÊÀ¶É« 
+        LCD_Clear(WHITE);                 //æ¸…å±
+        POINT_COLOR=BLUE;                 //è®¾ç½®å­—ä½“ä¸ºè“è‰²
+        LCD_ShowString(lcddev.width-24,0,200,16,16,"RST");
+        POINT_COLOR=RED;                  //æ¢å¤ç”»ç¬”é¢œè‰²
 }
 
 void gui_draw_hline(u16 x0,u16 y0,u16 len,u16 color)
 {
-	if(len==0)return;
-    if((x0+len-1)>=lcddev.width)x0=lcddev.width-len-1;	//ÏŞÖÆ×ø±ê·¶Î§
-    if(y0>=lcddev.height)y0=lcddev.height-1;			//ÏŞÖÆ×ø±ê·¶Î§
-	LCD_Fill(x0,y0,x0+len-1,y0,color);	
+        if(len==0)return;
+    if((x0+len-1)>=lcddev.width)x0=lcddev.width-len-1;  //é™åˆ¶åæ ‡èŒƒå›´
+    if(y0>=lcddev.height)y0=lcddev.height-1;            //é™åˆ¶åæ ‡èŒƒå›´
+        LCD_Fill(x0,y0,x0+len-1,y0,color);
 }
 
-//»­ÊµĞÄÔ²
-//x0,y0:×ø±ê
-//r:°ë¾¶
-//color:ÑÕÉ«
+//ç”»å®å¿ƒåœ†
 void gui_fill_circle(u16 x0,u16 y0,u16 r,u16 color)
-{											  
-	u32 i;
-	u32 imax = ((u32)r*707)/1000+1;
-	u32 sqmax = (u32)r*(u32)r+(u32)r/2;
-	u32 x=r;
-//	u16 tx0, ty0;
-//	char buf[32];  // »º³åÇø
-	gui_draw_hline(x0-r,y0,2*r,color);
-//	printf("Touch: x0, y0\r\n");
-	
-	 
-//    sprintf(buf, "X:%4d  Y:%4d", x0, y0);  // ¸ñÊ½»¯Îª×Ö·û´®
-//    LCD_ShowString(50, 50, 200, 16, 16, (uint8_t*)buf);
-	
-	
-	for (i=1;i<=imax;i++) 
-	{
-		if ((i*i+x*x)>sqmax)// draw lines from outside  
-		{
- 			if (x>imax) 
-			{
-				gui_draw_hline (x0-i+1,y0+x,2*(i-1),color);
-				gui_draw_hline (x0-i+1,y0-x,2*(i-1),color);
-			}
-			x--;
-		}
-		// draw lines from inside (center)  
-		gui_draw_hline(x0-x,y0+i,2*x,color);
-		gui_draw_hline(x0-x,y0-i,2*x,color);
-//		LCD_ShowString(30,70,200,16,16,"x=%d, y=%d\r\n");
-	}
-}  
-//Á½¸öÊıÖ®²îµÄ¾ø¶ÔÖµ 
-//x1,x2£ºĞèÈ¡²îÖµµÄÁ½¸öÊı
-//·µ»ØÖµ£º|x1-x2|
+{
+        u32 i;
+        u32 imax = ((u32)r*707)/1000+1;
+        u32 sqmax = (u32)r*(u32)r+(u32)r/2;
+        u32 x=r;
+        gui_draw_hline(x0-r,y0,2*r,color);
+
+        for (i=1;i<=imax;i++)
+        {
+                if ((i*i+x*x)>sqmax)
+                {
+                        if (x>imax)
+                        {
+                                gui_draw_hline (x0-i+1,y0+x,2*(i-1),color);
+                                gui_draw_hline (x0-i+1,y0-x,2*(i-1),color);
+                        }
+                        x--;
+                }
+                gui_draw_hline(x0-x,y0+i,2*x,color);
+                gui_draw_hline(x0-x,y0-i,2*x,color);
+        }
+}
+
+//ä¸¤ä¸ªæ•°ä¹‹å·®çš„ç»å¯¹å€¼
 u16 my_abs(u16 x1,u16 x2)
-{			 
-	if(x1>x2)return x1-x2;
-	else return x2-x1;
-}  
-//»­Ò»Ìõ´ÖÏß
-//(x1,y1),(x2,y2):ÏßÌõµÄÆğÊ¼×ø±ê
-//size£ºÏßÌõµÄ´ÖÏ¸³Ì¶È
-//color£ºÏßÌõµÄÑÕÉ«
+{
+        if(x1>x2)return x1-x2;
+        else return x2-x1;
+}
+
+//ç”»ä¸€æ¡ç²—çº¿
 void lcd_draw_bline(u16 x1, u16 y1, u16 x2, u16 y2,u8 size,u16 color)
 {
-	u16 t; 
-	int xerr=0,yerr=0,delta_x,delta_y,distance; 
-	int incx,incy,uRow,uCol; 
-	if(x1<size|| x2<size||y1<size|| y2<size)return; 
-	delta_x=x2-x1; //¼ÆËã×ø±êÔöÁ¿ 
-	delta_y=y2-y1; 
-	uRow=x1; 
-	uCol=y1; 
-	if(delta_x>0)incx=1; //ÉèÖÃµ¥²½·½Ïò 
-	else if(delta_x==0)incx=0;//´¹Ö±Ïß 
-	else {incx=-1;delta_x=-delta_x;} 
-	if(delta_y>0)incy=1; 
-	else if(delta_y==0)incy=0;//Ë®Æ½Ïß 
-	else{incy=-1;delta_y=-delta_y;} 
-	if( delta_x>delta_y)distance=delta_x; //Ñ¡È¡»ù±¾ÔöÁ¿×ø±êÖá 
-	else distance=delta_y; 
-	for(t=0;t<=distance+1;t++ )//»­ÏßÊä³ö 
-	{  
-		gui_fill_circle(uRow,uCol,size,color);//»­µã 
-		xerr+=delta_x ; 
-		yerr+=delta_y ; 
-		if(xerr>distance) 
-		{ 
-			xerr-=distance; 
-			uRow+=incx; 
-		} 
-		if(yerr>distance) 
-		{ 
-			yerr-=distance; 
-			uCol+=incy; 
-		} 
-	}  
+        u16 t;
+        int xerr=0,yerr=0,delta_x,delta_y,distance;
+        int incx,incy,uRow,uCol;
+        if(x1<size|| x2<size||y1<size|| y2<size)return;
+        delta_x=x2-x1;             //è®¡ç®—åæ ‡å¢é‡
+        delta_y=y2-y1;
+        uRow=x1;
+        uCol=y1;
+        if(delta_x>0)incx=1;       //è®¾ç½®å•æ­¥æ–¹å‘
+        else if(delta_x==0)incx=0; //å‚ç›´çº¿
+        else {incx=-1;delta_x=-delta_x;}
+        if(delta_y>0)incy=1;
+        else if(delta_y==0)incy=0; //æ°´å¹³çº¿
+        else{incy=-1;delta_y=-delta_y;}
+        if( delta_x>delta_y)distance=delta_x; //é€‰å–åŸºæœ¬å¢é‡åæ ‡è½´
+        else distance=delta_y;
+        for(t=0;t<=distance+1;t++ )
+        {
+                gui_fill_circle(uRow,uCol,size,color);
+                xerr+=delta_x ;
+                yerr+=delta_y ;
+                if(xerr>distance)
+                {
+                        xerr-=distance;
+                        uRow+=incx;
+                }
+                if(yerr>distance)
+                {
+                        yerr-=distance;
+                        uCol+=incy;
+                }
+        }
 }
 
-const u16 POINT_COLOR_TBL[10]={RED,GREEN,BLUE,BROWN,GRED,BRED,GBLUE,LIGHTBLUE,BRRED,GRAY};  
+const u16 POINT_COLOR_TBL[10]={RED,GREEN,BLUE,BROWN,GRED,BRED,GBLUE,LIGHTBLUE,BRRED,GRAY};
 
-void ctp_test(void)
+/* è§¦æ‘¸å±ä»»åŠ¡ */
+void ctp_task(void *pvParameters)
 {
-	u16 x,y;
-	u16 abc,bac;
-	u8 t=0;
-	u8 i=0;	  	    
- 	u16 lastpos[10][2];		//×îºóÒ»´ÎµÄÊı¾İ 
-	u8 maxp=5;
+        u16 x,y;
+        u16 abc,bac;
+        u8 t=0;
+        u8 i=0;
+        u16 lastpos[10][2];             //æœ€åä¸€æ¬¡çš„æ•°æ®
+        u8 maxp=5;
 
-	if(lcddev.id==0X1018)maxp=10;
-	while(1)
-	{
-		tp_dev.scan(0);
+        if(lcddev.id==0X1018)maxp=10;
+        while(1)
+        {
+                tp_dev.scan(0);
 
-		for(t=0;t<maxp;t++)
-		{
-			if((tp_dev.sta)&(1<<t))
-			{
-				if(tp_dev.x[t]<lcddev.width&&tp_dev.y[t]<lcddev.height)
-				{
-					if(lastpos[t][0]==0XFFFF)
-					{
-						lastpos[t][0] = tp_dev.x[t];
-						lastpos[t][1] = tp_dev.y[t];
-					}
-					lcd_draw_bline(lastpos[t][0],lastpos[t][1],tp_dev.x[t],tp_dev.y[t],2,POINT_COLOR_TBL[t]);//»­Ïß
-					lastpos[t][0]=tp_dev.x[t];
-					lastpos[t][1]=tp_dev.y[t];
+                for(t=0;t<maxp;t++)
+                {
+                        if((tp_dev.sta)&(1<<t))
+                        {
+                                if(tp_dev.x[t]<lcddev.width&&tp_dev.y[t]<lcddev.height)
+                                {
+                                        if(lastpos[t][0]==0XFFFF)
+                                        {
+                                                lastpos[t][0] = tp_dev.x[t];
+                                                lastpos[t][1] = tp_dev.y[t];
+                                        }
+                                        lcd_draw_bline(lastpos[t][0],lastpos[t][1],tp_dev.x[t],tp_dev.y[t],2,POINT_COLOR_TBL[t]);
+                                        lastpos[t][0]=tp_dev.x[t];
+                                        lastpos[t][1]=tp_dev.y[t];
 
-					UI_TouchHandler(x,y);
+                                        x=tp_dev.x[t];
+                                        y=tp_dev.y[t];
+                                        UI_TouchHandler(x,y);
 
-					if(tp_dev.x[t]>(lcddev.width-24)&&tp_dev.y[t]<20)
-					{
-						Load_Drow_Dialog();//Çå³ı
-					}
-				}
-			}else lastpos[t][0]=0XFFFF;
-		} 
-		ESP8266_MQTT_LED_Process();
-		delay_ms(5);i++;
-		UI_DATA_Show(abc,bac);
-		if(i%20==0)LED0=!LED0;
+                                        if(tp_dev.x[t]>(lcddev.width-24)&&tp_dev.y[t]<20)
+                                        {
+                                                Load_Drow_Dialog();
+                                        }
+                                }
+                        }else lastpos[t][0]=0XFFFF;
+                }
+                ESP8266_MQTT_LED_Process();
+                vTaskDelay(pdMS_TO_TICKS(5));
+                i++;
+                UI_DATA_Show(abc,bac);
+                if(i%20==0)LED0=!LED0;
 
-	}	
+        }
+}
+
+/* æ¸©åº¦é‡‡é›†ä¸LEDé—ªçƒä»»åŠ¡ï¼Œ5ç§’æ‰§è¡Œä¸€æ¬¡ */
+void temp_led_task(void *pvParameters)
+{
+        u8 temp,humi;
+        while(1)
+        {
+                if(DHT11_Read_Data(&temp,&humi)==0)
+                {
+                        printf("T:%d H:%d\r\n",temp,humi);
+                }
+                LED0=!LED0;
+                vTaskDelay(pdMS_TO_TICKS(5000));
+        }
 }
 
 int main(void)
 {
-//    u32 fontcnt;		  
-//	u8 i,j;
-//	u8 fontx[2];                    //gbkÂë
-//	u8 key,t;
-	
-    HAL_Init();                     //³õÊ¼»¯HAL¿â   
-    Stm32_Clock_Init(360,25,2,8);   //ÉèÖÃÊ±ÖÓ,180Mhz
-    delay_init(180);                //³õÊ¼»¯ÑÓÊ±º¯Êı
-    uart_init(115200);              //³õÊ¼»¯USART
-    LED_Init();                     //³õÊ¼»¯LED 
-    KEY_Init();                     //³õÊ¼»¯°´¼ü
-    SDRAM_Init();                   //³õÊ¼»¯SDRAM
-    LCD_Init();                     //³õÊ¼»¯LCD
-	tp_dev.init();				    //´¥ÃşÆÁ³õÊ¼»¯ 
-  	POINT_COLOR=RED;
-	PCF8574_Init();
-	PCF8574_ReadBit(BEEP_IO);
+    HAL_Init();                     //åˆå§‹åŒ–HALåº“
+    Stm32_Clock_Init(360,25,2,8);   //è®¾ç½®æ—¶é’Ÿ,180Mhz
+    delay_init(180);                //åˆå§‹åŒ–å»¶æ—¶å‡½æ•°
+    uart_init(115200);              //åˆå§‹åŒ–USART
+    LED_Init();                     //åˆå§‹åŒ–LED
+    KEY_Init();                     //åˆå§‹åŒ–æŒ‰é”®
+    SDRAM_Init();                   //åˆå§‹åŒ–SDRAM
+    LCD_Init();                     //åˆå§‹åŒ–LCD
+        tp_dev.init();              //è§¦æ‘¸å±åˆå§‹åŒ–
+        POINT_COLOR=RED;
+        PCF8574_Init();
+        PCF8574_ReadBit(BEEP_IO);
     DHT11_Init();
-	font_init();
-    my_mem_init(SRAMIN);            //³õÊ¼»¯ÄÚ²¿ÄÚ´æ³Ø
-    my_mem_init(SRAMEX);            //³õÊ¼»¯Íâ²¿SDRAMÄÚ´æ³Ø
-    my_mem_init(SRAMCCM);           //³õÊ¼»¯ÄÚ²¿CCMÄÚ´æ³Ø
-    exfuns_init();		            //ÎªfatfsÏà¹Ø±äÁ¿ÉêÇëÄÚ´æ
-	W25QXX_Init();
-	RTC_Init();                     //³õÊ¼»¯RTC 
-	ESP8266_Init(115200);
-	f_mount(fs[0],"0:",1);          //¹ÒÔØSD¿¨ 
-  	f_mount(fs[1],"1:",1);          //¹ÒÔØSPI FLASH. 
-	UI_Init();
+        font_init();
+    my_mem_init(SRAMIN);            //åˆå§‹åŒ–å†…éƒ¨å†…å­˜æ± 
+    my_mem_init(SRAMEX);            //åˆå§‹åŒ–å¤–éƒ¨SDRAMå†…å­˜æ± 
+    my_mem_init(SRAMCCM);           //åˆå§‹åŒ–å†…éƒ¨CCMå†…å­˜æ± 
+    exfuns_init();                  //ä¸ºfatfsç›¸å…³å˜é‡ç”³è¯·å†…å­˜
+        W25QXX_Init();
+        RTC_Init();                 //åˆå§‹åŒ–RTC
+        ESP8266_Init(115200);
+        f_mount(fs[0],"0:",1);      //æŒ‚è½½SDå¡
+        f_mount(fs[1],"1:",1);      //æŒ‚è½½SPI FLASH
+        UI_Init();
 
-    ctp_test();
+    /* åˆ›å»ºä»»åŠ¡å¹¶å¯åŠ¨è°ƒåº¦å™¨ */
+    xTaskCreate(ctp_task,"touch",512,NULL,3,NULL);
+    xTaskCreate(temp_led_task,"temp",256,NULL,2,NULL);
 
+    vTaskStartScheduler();
+
+    while(1);      //ä¸åº”è¿è¡Œåˆ°è¿™é‡Œ
 }
- 
-
-
-
-
 
