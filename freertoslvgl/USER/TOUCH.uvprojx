@@ -336,7 +336,7 @@
               <MiscControls>--diag_suppress=68,111,188,223,546,1295</MiscControls>
               <Define>USE_HAL_DRIVER,STM32F429xx</Define>
               <Undefine></Undefine>
-              <IncludePath>..\CORE;..\OBJ;..\USER;..\HALLIB\STM32F4xx_HAL_Driver\Inc;..\SYSTEM\delay;..\SYSTEM\sys;..\SYSTEM\usart;..\HARDWARE\LED;..\HARDWARE\KEY;..\HARDWARE\LCD;..\HARDWARE\SDRAM;..\HARDWARE\KEY;..\HARDWARE\IIC;..\HARDWARE\24CXX;..\HARDWARE\TOUCH;..\MIddlewares\LVGL\GUI;..\MIddlewares\LVGL\GUI\lvgl;..\MIddlewares\LVGL\GUI\lvgl\src;..\MIddlewares\LVGL\GUI\lvgl\examples\porting;..\MIddlewares\LVGL\GUI\lvgl;..\HARDWARE\TIMER;..\MIddlewares\LVGL\GUI\lvgl\src\misc;..\MIddlewares\LVGL\GUI_APP\demos;..\MIddlewares\LVGL\GUI_APP\demos\stress;..\MIddlewares\LVGL\GUI_APP\demos\music;..\MIddlewares\FreeRTOS;..\MIddlewares\FreeRTOS\portable\MemMang;..\MIddlewares\FreeRTOS\portable\RVDS\ARM_CM4F;..\MIddlewares\FreeRTOS\include</IncludePath>
+              <IncludePath>..\CORE;..\OBJ;..\USER;..\HALLIB\STM32F4xx_HAL_Driver\Inc;..\SYSTEM\delay;..\SYSTEM\sys;..\SYSTEM\usart;..\HARDWARE\LED;..\HARDWARE\KEY;..\HARDWARE\LCD;..\HARDWARE\SDRAM;..\HARDWARE\KEY;..\HARDWARE\IIC;..\HARDWARE\24CXX;..\HARDWARE\TOUCH;..\MIddlewares\LVGL\GUI;..\MIddlewares\LVGL\GUI\lvgl;..\MIddlewares\LVGL\GUI\lvgl\src;..\MIddlewares\LVGL\GUI\lvgl\examples\porting;..\MIddlewares\LVGL\GUI\lvgl;..\HARDWARE\TIMER;..\MIddlewares\LVGL\GUI\lvgl\src\misc;..\MIddlewares\LVGL\GUI_APP\demos;..\MIddlewares\LVGL\GUI_APP\demos\stress;..\MIddlewares\LVGL\GUI_APP\demos\music;..\MIddlewares\FreeRTOS;..\MIddlewares\FreeRTOS\portable\MemMang;..\MIddlewares\FreeRTOS\portable\RVDS\ARM_CM4F;..\MIddlewares\FreeRTOS\include;..\MIddlewares\MALLOC</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1824,6 +1824,16 @@
               <FileName>port.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\MIddlewares\FreeRTOS\portable\RVDS\ARM_CM4F\port.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>MIddlewares\MALLOC</GroupName>
+          <Files>
+            <File>
+              <FileName>malloc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\MIddlewares\MALLOC\malloc.c</FilePath>
             </File>
           </Files>
         </Group>

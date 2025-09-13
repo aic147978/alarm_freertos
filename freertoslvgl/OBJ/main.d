@@ -208,3 +208,4 @@
 ..\obj\main.o: ..\MIddlewares\LVGL\GUI\lvgl\src/extra/libs/rlottie/lv_rlottie.h
 ..\obj\main.o: ..\MIddlewares\LVGL\GUI\lvgl\src/extra/libs/ffmpeg/lv_ffmpeg.h
 ..\obj\main.o: lvgl_demo.h
+..\obj\main.o: ..\MIddlewares\MALLOC\malloc.h

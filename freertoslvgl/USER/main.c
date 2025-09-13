@@ -14,6 +14,7 @@
 //#include "lv_demo_stress.h"
 //#include "lv_demo_music.h"
 #include "lvgl_demo.h"
+#include "malloc.h"
 
 /************************************************
  ALIENTEK 阿波罗STM32F429开发板实验30
@@ -63,6 +64,7 @@ int main(void)
     usart_init(115200);              //初始化USART
     LED_Init();                     //初始化LED           // LCD、触摸、LED、定时器初始化
 	  SDRAM_Init();                   //初始化SDRAM
+//	  my_mem_init(SRAMIN);
 //    lv_init();
 //    lv_port_disp_init();
 //    lv_port_indev_init();
