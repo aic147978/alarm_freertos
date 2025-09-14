@@ -14,6 +14,7 @@
 #include "lv_demos/src/lv_demo_widgets/lv_demo_widgets.h"
 #include "lv_drivers/win32drv/win32drv.h"
 #include "lv_demos/src/lv_demo_base/lv_demo_base.h"
+#include "myGUI.h"
 
 #include <windows.h>
 
@@ -55,7 +56,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLi
     LV_LOG_USER("LVGL initialization completed!");
 
     /*Run the demo*/
-   lv_demo_widgets();
+  // lv_demo_widgets();
+  my_GUI();
 
     while(!lv_win32_quit_signal) {
         /* Periodically call the lv_task handler.

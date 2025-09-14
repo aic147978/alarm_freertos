@@ -40,6 +40,9 @@
 			<Add option="-Wall" />
 			<Add directory="." />
 		</Compiler>
+		<Unit filename="kaleter.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="lv_conf.h" />
 		<Unit filename="lv_demo_conf.h" />
 		<Unit filename="lv_demos/src/lv_demo.h" />
@@ -1356,6 +1359,10 @@
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="myGUI.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="myGUI.h" />
 		<Extensions>
 			<DoxyBlocks>
 				<comment_style block="0" line="0" />

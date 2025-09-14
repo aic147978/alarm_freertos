@@ -246,7 +246,7 @@ EXTERN_C bool lv_win32_init(
     WindowClass.cbWndExtra = 0;
     WindowClass.hInstance = instance_handle;
     WindowClass.hIcon = icon_handle;
-    WindowClass.hCursor = LoadCursorW(NULL, IDC_ARROW);
+    WindowClass.hCursor = LoadCursorA(NULL, IDC_ARROW);
     WindowClass.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     WindowClass.lpszMenuName = NULL;
     WindowClass.lpszClassName = L"lv_sim_visual_studio";
@@ -418,7 +418,7 @@ static HDC lv_win32_create_frame_buffer(
 #else
             BITMAPINFO BitmapInfo = { 0 };
 #endif
-            
+
             BitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
             BitmapInfo.bmiHeader.biWidth = Width;
             BitmapInfo.bmiHeader.biHeight = -Height;
@@ -483,7 +483,7 @@ static HDC lv_win32_create_frame_buffer(
 #else
                 *PixelBufferSize = Width * Height * sizeof(UINT32);
 #endif
-             
+
                 DeleteObject(SelectObject(hFrameBufferDC, hBitmap));
                 DeleteObject(hBitmap);
             }
@@ -500,7 +500,7 @@ static HDC lv_win32_create_frame_buffer(
 
 static BOOL lv_win32_enable_child_window_dpi_message(
     HWND WindowHandle)
-{ 
+{
     // This hack is only for Windows 10 TH1/TH2 only.
     // We don't need this hack if the Per Monitor Aware V2 is existed.
     OSVERSIONINFOEXW OSVersionInfoEx = { 0 };
