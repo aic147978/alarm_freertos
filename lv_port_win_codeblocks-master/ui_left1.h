@@ -9,6 +9,7 @@
  * @param center_container 主界面提供的内容容器，页面元素会被添加到其中。
  */
 void ui_left1_create(lv_obj_t *center_container);
+void ui_left1_set_valve_count(int n);
 
 /**
  * @brief 清理“左一”页面产生的附加控件。

@@ -1360,6 +1360,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="myGUI.h" />
+		<Unit filename="ui_history.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ui_history.h" />
 		<Unit filename="ui_keypad.c">
 			<Option compilerVar="CC" />
 		</Unit>

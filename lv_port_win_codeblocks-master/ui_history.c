@@ -1,318 +1,427 @@
-#include "ui_history.h"
+#include "ui_left1.h"
+#include "ui_keypad.h"
+
+#include <stdbool.h>
 #include <stdio.h>
-#include <string.h>
 
-/* ====== 可调参数 ====== */
-#define HISTORY_ALARM_MAX   200
-#define HISTORY_FEED_MAX    200
-#define ROWS_PER_PAGE       7      /* 每页数据行数（不含表头） */
-#define RIGHT_PANEL_W       110    /* 右侧按钮区域宽度 */
-#define MARGIN_LR           20
-#define MARGIN_TB           20
+/* ====== 可扩展容量与分页配置 ====== */
+#define MAX_VALVES     32
+#define ROWS_PER_PAGE  5
 
-/* ====== 内部状态 ====== */
-typedef enum { MODE_ALARM = 0, MODE_FEED = 1 } HistoryMode;
+/* ====== 阀门总数 & 分页状态 ====== */
+static int  s_valve_count = 5;    /* 外部可调 */
+static int  s_page_idx    = 0;    /* 0-based */
 
-static lv_obj_t *s_root = NULL;          /* 本页根容器（放在你给的 parent 内） */
-static lv_obj_t *s_table_alarm = NULL;
-static lv_obj_t *s_table_feed  = NULL;
-static lv_obj_t *s_btn_up = NULL;
-static lv_obj_t *s_btn_down = NULL;
-static lv_obj_t *s_btn_switch = NULL;
-
-static HistoryMode s_mode = MODE_ALARM;
-static int s_page_idx = 0;               /* 0=最新页；越大越旧 */
-
-/* 数据存储（简单向量/环形加计数实现） */
-static AlarmRecord g_alarm[HISTORY_ALARM_MAX];
-static size_t      g_alarm_cnt = 0;
-
-static FeedRecord  g_feed[HISTORY_FEED_MAX];
-static size_t      g_feed_cnt  = 0;
-
-/* ====== 小工具 ====== */
-static inline size_t min_sz(size_t a, size_t b){ return a < b ? a : b; }
-
-static size_t page_count(size_t total)
-{
-    if (total == 0) return 1; /* 空时也算 1 页，显示空白行 */
-    size_t pc = (total + ROWS_PER_PAGE - 1) / ROWS_PER_PAGE;
-    return pc;
+static inline int page_count(void) {
+    return (s_valve_count + ROWS_PER_PAGE - 1) / ROWS_PER_PAGE;
+}
+static inline int page_first_index(void) { return s_page_idx * ROWS_PER_PAGE; }
+static inline int page_last_index(void)  {
+    int last = page_first_index() + ROWS_PER_PAGE;
+    if(last > s_valve_count) last = s_valve_count;
+    return last;
 }
 
-static void set_table_size_and_pos(lv_obj_t *table)
+/* ====== 数据区 ====== */
+static int  s_left_set[MAX_VALVES]     = {0};
+static int  s_left_time_s[MAX_VALVES]  = { [0 ... MAX_VALVES-1] = 10 };
+static int  s_right_set[MAX_VALVES]    = {0};
+static int  s_right_time_s[MAX_VALVES] = { [0 ... MAX_VALVES-1] = 10 };
+static int  s_start_sec[MAX_VALVES]    = {0};
+static int  s_end_sec[MAX_VALVES]      = {0};
+static bool s_row_enable[MAX_VALVES]   = {false};
+
+/* 输入绑定条目 */
+static ui_bind_entry_t s_left_set_entries[MAX_VALVES];
+static ui_bind_entry_t s_left_time_entries[MAX_VALVES];
+static ui_bind_entry_t s_right_set_entries[MAX_VALVES];
+static ui_bind_entry_t s_right_time_entries[MAX_VALVES];
+static ui_bind_entry_t s_start_entries[MAX_VALVES];
+static ui_bind_entry_t s_end_entries[MAX_VALVES];
+
+/* 页面对象缓存 */
+static lv_obj_t *s_panel_a     = NULL;   /* 重量设置界面（有页码与翻页按钮） */
+static lv_obj_t *s_panel_b     = NULL;   /* 上料/时间配置界面（无页码与翻页按钮） */
+static lv_obj_t *s_switch_btn  = NULL;   /* A/B切换按钮（沿用） */
+static bool      s_show_panel_a = true;
+
+/* ====== 新增：右侧翻页控件（只在 Panel A 显示） ====== */
+static lv_obj_t *s_page_ctrl   = NULL;   /* 右侧竖直容器 */
+static lv_obj_t *s_btn_up      = NULL;
+static lv_obj_t *s_btn_down    = NULL;
+static lv_obj_t *s_page_label  = NULL;   /* “page X/Y” */
+static bool      s_page_label_on_top = true; /* 页码在按钮上方/下方 */
+
+/* ========== 回调与基础 ========== */
+static void checkbox_event_cb(lv_event_t *e)
 {
-    if(!s_root || !table) return;
-    lv_coord_t w = lv_obj_get_width(s_root);
-    lv_coord_t h = lv_obj_get_height(s_root);
-
-    lv_coord_t table_w = w - RIGHT_PANEL_W - MARGIN_LR*2;
-    lv_coord_t table_h = h - MARGIN_TB*2;
-
-    lv_obj_set_size(table, table_w, table_h);
-    lv_obj_align(table, LV_ALIGN_LEFT_MID, MARGIN_LR, 0);
+    lv_obj_t *cb = lv_event_get_target(e);
+    bool *var = (bool *)lv_event_get_user_data(e);
+    if(var) *var = lv_obj_has_state(cb, LV_STATE_CHECKED);
 }
 
-static void clear_table_rows(lv_obj_t *table, uint16_t col_cnt)
+/* 九键输入按钮封装 */
+static lv_obj_t *create_value_button(lv_obj_t *parent,
+                                     ui_bind_entry_t *entry,
+                                     int *bind_var,
+                                     const char *suffix,
+                                     bool is_time,
+                                     uint8_t max_digits)
 {
-    /* 行数=表头(1)+数据行(ROWS_PER_PAGE) */
-    lv_table_set_row_cnt(table, ROWS_PER_PAGE + 1);
-    for (uint16_t r = 1; r <= ROWS_PER_PAGE; ++r) {
-        for (uint16_t c = 0; c < col_cnt; ++c) {
-            lv_table_set_cell_value(table, r, c, "");
+    lv_obj_t *btn = lv_btn_create(parent);
+    lv_obj_set_size(btn, 120, 40);
+
+    lv_obj_t *label = lv_label_create(btn);
+    lv_obj_center(label);
+
+    ui_keypad_entry_init(entry, label, bind_var, suffix, is_time, max_digits);
+    ui_keypad_bind_button(btn, entry);
+    return btn;
+}
+
+/* ========== 页码/按钮：状态与文本刷新 ========== */
+static void update_page_label(void)
+{
+    if(!s_page_label) return;
+    int pc = page_count();
+    if(pc <= 0) pc = 1;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "page %d/%d", s_page_idx + 1, pc);
+    lv_label_set_text(s_page_label, buf);
+}
+
+static void update_page_buttons_state(void)
+{
+    bool multi = page_count() > 1;
+    if(s_btn_up) {
+        if(!multi || s_page_idx <= 0) lv_obj_add_state(s_btn_up, LV_STATE_DISABLED);
+        else                          lv_obj_clear_state(s_btn_up, LV_STATE_DISABLED);
+    }
+    if(s_btn_down) {
+        if(!multi || s_page_idx >= page_count() - 1) lv_obj_add_state(s_btn_down, LV_STATE_DISABLED);
+        else                                         lv_obj_clear_state(s_btn_down, LV_STATE_DISABLED);
+    }
+    if(s_page_ctrl) {
+        if(multi) lv_obj_clear_flag(s_page_ctrl, LV_OBJ_FLAG_HIDDEN);
+        else      lv_obj_add_flag(s_page_ctrl, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+/* 翻页核心 */
+static void page_change(int delta)
+{
+    int pc = page_count();
+    if(pc <= 1) return;
+
+    int new_idx = s_page_idx + delta;
+    if(new_idx < 0) new_idx = 0;
+    if(new_idx >= pc) new_idx = pc - 1;
+    if(new_idx == s_page_idx) return;
+
+    s_page_idx = new_idx;
+    /* 重建当前页UI */
+    if(s_panel_a) {
+        /* 仅重建Panel A内容（Panel B无分页控件） */
+        /* 为了保持清晰，单独调用重建函数 */
+    }
+    /* 用专用重建函数刷新两个Panel的行 */
+    /* 这两个函数在后面定义 */
+    extern void rebuild_panel_3a_rows(void);
+    extern void rebuild_panel_3b_rows(void);
+    rebuild_panel_3a_rows();
+    rebuild_panel_3b_rows(); /* 若B页用到分页数据，视需要可保留；否则可不重建 */
+
+    update_page_label();
+    update_page_buttons_state();
+}
+
+/* 按钮事件 */
+static void btn_up_event_cb(lv_event_t *e)   { LV_UNUSED(e); page_change(-1); }
+static void btn_down_event_cb(lv_event_t *e) { LV_UNUSED(e); page_change(+1); }
+
+/* 键盘↑/↓也支持（可选） */
+static void key_event_cb(lv_event_t *e)
+{
+    uint32_t key = lv_event_get_key(e);
+    if(key == LV_KEY_UP)      page_change(-1);
+    else if(key == LV_KEY_DOWN) page_change(+1);
+}
+
+/* ========== Panel A（重量设置）行重建 ========== */
+void rebuild_panel_3a_rows(void)
+{
+    if(!s_panel_a) return;
+    lv_obj_clean(s_panel_a);
+
+    /* 标题（整体左移约20px） */
+    lv_obj_t *t1 = lv_label_create(s_panel_a);
+    lv_label_set_text(t1, "left  set                              time");
+    lv_obj_align(t1, LV_ALIGN_TOP_LEFT, 85, 10);   /* 原105 -> 85 */
+
+    lv_obj_t *t2 = lv_label_create(s_panel_a);
+    lv_label_set_text(t2, "right set                             time");
+    lv_obj_align(t2, LV_ALIGN_TOP_RIGHT, -100, 10);/* 原-80 -> -100，使整体更靠左 */
+
+    const int first = page_first_index();
+    const int last  = page_last_index();
+    const int row_cnt = (last > first) ? (last - first) : 0;
+
+    int top_margin = 50;
+    int available_h = 370 - top_margin - 10;
+    int row_space = row_cnt > 0 ? (available_h / row_cnt) : available_h;
+
+    for(int i = 0; i < row_cnt; i++) {
+        int idx = first + i;
+        int y   = top_margin + i * row_space;
+
+        /* 左列（整体左移20px） */
+        lv_obj_t *idx_l = lv_label_create(s_panel_a);
+        lv_label_set_text_fmt(idx_l, "%d.", idx + 1);
+        lv_obj_align(idx_l, LV_ALIGN_TOP_LEFT, 40, y);          /* 原60 -> 40 */
+
+        lv_obj_t *btn_set_l = create_value_button(s_panel_a, &s_left_set_entries[idx],
+                                                  &s_left_set[idx], "kg", false, 3);
+        lv_obj_align(btn_set_l, LV_ALIGN_TOP_LEFT, 60, y - 10); /* 原80 -> 60 */
+
+        lv_obj_t *btn_time_l = create_value_button(s_panel_a, &s_left_time_entries[idx],
+                                                   &s_left_time_s[idx], "s", false, 3);
+        lv_obj_align(btn_time_l, LV_ALIGN_TOP_LEFT, 220, y - 10);/* 原240 -> 220 */
+
+        /* 右列（整体左移20px） */
+        lv_obj_t *idx_r = lv_label_create(s_panel_a);
+        lv_label_set_text_fmt(idx_r, "%d.", idx + 1);
+        lv_obj_align(idx_r, LV_ALIGN_TOP_LEFT, 400, y);         /* 原420 -> 400 */
+
+        lv_obj_t *btn_set_r = create_value_button(s_panel_a, &s_right_set_entries[idx],
+                                                  &s_right_set[idx], "kg", false, 3);
+        lv_obj_align(btn_set_r, LV_ALIGN_TOP_LEFT, 420, y - 10);/* 原440 -> 420 */
+
+        lv_obj_t *btn_time_r = create_value_button(s_panel_a, &s_right_time_entries[idx],
+                                                   &s_right_time_s[idx], "s", false, 3);
+        lv_obj_align(btn_time_r, LV_ALIGN_TOP_LEFT, 580, y - 10);/* 原600 -> 580 */
+    }
+}
+
+/* ========== Panel B（上料/时间）行重建：不显示翻页控件 ========== */
+void rebuild_panel_3b_rows(void)
+{
+    if(!s_panel_b) return;
+    lv_obj_clean(s_panel_b);
+
+    lv_obj_t *t1 = lv_label_create(s_panel_b);
+    lv_label_set_text(t1, "start time");
+    lv_obj_align(t1, LV_ALIGN_TOP_LEFT, 140, 10);   /* 左移20：原160 -> 140 */
+
+    lv_obj_t *t2 = lv_label_create(s_panel_b);
+    lv_label_set_text(t2, "end time");
+    lv_obj_align(t2, LV_ALIGN_TOP_RIGHT, -280, 10); /* 左移20：原-260 -> -280 */
+
+    const int first = page_first_index();
+    const int last  = page_last_index();
+    const int row_cnt = (last > first) ? (last - first) : 0;
+
+    int top_margin = 50;
+    int available_h = 400 - top_margin - 20;
+    int row_space = row_cnt > 0 ? (available_h / row_cnt) : available_h;
+
+    for(int i = 0; i < row_cnt; i++) {
+        int idx = first + i;
+        int y   = top_margin + i * row_space;
+
+        lv_obj_t *idx_l = lv_label_create(s_panel_b);
+        lv_label_set_text_fmt(idx_l, "%d.", idx + 1);
+        lv_obj_align(idx_l, LV_ALIGN_TOP_LEFT, 100, y);          /* 左移20：原120 -> 100 */
+
+        lv_obj_t *btn_start = create_value_button(s_panel_b, &s_start_entries[idx],
+                                                  &s_start_sec[idx], NULL, true, 4);
+        lv_obj_align(btn_start, LV_ALIGN_TOP_LEFT, 140, y - 10); /* 左移20：原160 -> 140 */
+
+        lv_obj_t *btn_end = create_value_button(s_panel_b, &s_end_entries[idx],
+                                                &s_end_sec[idx], NULL, true, 4);
+        lv_obj_align(btn_end, LV_ALIGN_TOP_RIGHT, -280, y - 10); /* 左移20：原-260 -> -280 */
+
+        lv_obj_t *cb = lv_checkbox_create(s_panel_b);
+        lv_checkbox_set_text(cb, "");
+        lv_obj_align(cb, LV_ALIGN_TOP_RIGHT, -140, y);           /* 左移20：原-120 -> -140 */
+        lv_obj_add_event_cb(cb, checkbox_event_cb, LV_EVENT_VALUE_CHANGED, &s_row_enable[idx]);
+        if(s_row_enable[idx]) lv_obj_add_state(cb, LV_STATE_CHECKED);
+    }
+
+    /* Panel B 默认隐藏（按原逻辑） */
+    lv_obj_add_flag(s_panel_b, LV_OBJ_FLAG_HIDDEN);
+}
+
+/* ====== 构建右侧翻页控件列（只在 Panel A 使用） ====== */
+static void build_page_ctrl(lv_obj_t *parent)
+{
+    if(s_page_ctrl) {
+        lv_obj_del(s_page_ctrl);
+        s_page_ctrl = NULL;
+    }
+
+    s_page_ctrl = lv_obj_create(parent);
+    lv_obj_set_size(s_page_ctrl, 90, 220);  /* 窄竖条 */
+    lv_obj_align(s_page_ctrl, LV_ALIGN_RIGHT_MID, -10, 0);
+    lv_obj_clear_flag(s_page_ctrl, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* 页码 */
+    s_page_label = lv_label_create(s_page_ctrl);
+    lv_label_set_text(s_page_label, "page 1/1");
+    if(s_page_label_on_top) lv_obj_align(s_page_label, LV_ALIGN_TOP_MID, 0, 0);
+    else                    lv_obj_align(s_page_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+    /* 上翻按钮 */
+    s_btn_up = lv_btn_create(s_page_ctrl);
+    lv_obj_set_size(s_btn_up, 64, 64);
+    lv_obj_set_style_radius(s_btn_up, LV_RADIUS_CIRCLE, 0);
+    lv_obj_add_event_cb(s_btn_up, btn_up_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_align(s_btn_up, LV_ALIGN_CENTER, 0, s_page_label_on_top ? -40 : -20);
+
+    lv_obj_t *icon_up = lv_label_create(s_btn_up);
+    lv_label_set_text(icon_up, LV_SYMBOL_UP);
+    lv_obj_center(icon_up);
+
+    /* 下翻按钮 */
+    s_btn_down = lv_btn_create(s_page_ctrl);
+    lv_obj_set_size(s_btn_down, 64, 64);
+    lv_obj_set_style_radius(s_btn_down, LV_RADIUS_CIRCLE, 0);
+    lv_obj_add_event_cb(s_btn_down, btn_down_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_align(s_btn_down, LV_ALIGN_CENTER, 0, s_page_label_on_top ? +40 : +20);
+
+    lv_obj_t *icon_dn = lv_label_create(s_btn_down);
+    lv_label_set_text(icon_dn, LV_SYMBOL_DOWN);
+    lv_obj_center(icon_dn);
+
+    update_page_label();
+    update_page_buttons_state();
+}
+
+/* ====== A/B界面切换（保持“翻页控件仅在Panel A可见”） ====== */
+static void switch_event_cb(lv_event_t *e)
+{
+    LV_UNUSED(e);
+    s_show_panel_a = !s_show_panel_a;
+
+    if(s_panel_a && s_panel_b) {
+        if(s_show_panel_a) {
+            lv_obj_clear_flag(s_panel_a, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(s_panel_b, LV_OBJ_FLAG_HIDDEN);
+            if(s_page_ctrl) lv_obj_clear_flag(s_page_ctrl, LV_OBJ_FLAG_HIDDEN); /* 只在A显示 */
+        } else {
+            lv_obj_clear_flag(s_panel_b, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(s_panel_a, LV_OBJ_FLAG_HIDDEN);
+            if(s_page_ctrl) lv_obj_add_flag(s_page_ctrl, LV_OBJ_FLAG_HIDDEN);  /* B隐藏 */
         }
     }
 }
 
-/* ====== 数据填充（根据 s_mode / s_page_idx 刷表） ====== */
-static void fill_alarm_page(void)
+/* ====== 对外API ====== */
+void ui_left1_set_valve_count(int n)
 {
-    lv_obj_clear_flag(s_table_alarm, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag  (s_table_feed,  LV_OBJ_FLAG_HIDDEN);
+    if(n < 1) n = 1;
+    if(n > MAX_VALVES) n = MAX_VALVES;
+    s_valve_count = n;
 
-    /* 表头 */
-    lv_table_set_col_cnt(s_table_alarm, 3);
-    clear_table_rows(s_table_alarm, 3);
-    lv_table_set_cell_value(s_table_alarm, 0, 0, "serial num");
-    lv_table_set_cell_value(s_table_alarm, 0, 1, "start time");
-    lv_table_set_cell_value(s_table_alarm, 0, 2, "alarm type");
+    if(s_page_idx >= page_count()) s_page_idx = page_count() - 1;
+    if(s_page_idx < 0) s_page_idx = 0;
 
-    lv_table_set_col_width(s_table_alarm, 0, 120);
-    lv_table_set_col_width(s_table_alarm, 1, 220);
-    lv_table_set_col_width(s_table_alarm, 2, 220);
+    rebuild_panel_3a_rows();
+    rebuild_panel_3b_rows();
+    update_page_label();
+    update_page_buttons_state();
+}
 
-    /* 计算当前页起点：最新在上
-       page 0: 显示 [last ... last-ROWS_PER_PAGE+1] */
-    size_t total = g_alarm_cnt;
-    size_t pc    = page_count(total);
-    if ((size_t)s_page_idx >= pc) s_page_idx = (int)pc - 1;
-
-    for (uint16_t r = 1; r <= ROWS_PER_PAGE; ++r) {
-        /* i 为要显示的数据序号（从 0..total-1），最新为 total-1 */
-        long i = (long)total - 1 - (long)(s_page_idx * ROWS_PER_PAGE) - (long)(r - 1);
-        if (i >= 0 && (size_t)i < total) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "%u", g_alarm[i].serial);
-            lv_table_set_cell_value(s_table_alarm, r, 0, buf);
-            lv_table_set_cell_value(s_table_alarm, r, 1, g_alarm[i].start_time);
-            lv_table_set_cell_value(s_table_alarm, r, 2, g_alarm[i].alarm_type);
-        }
+/* 页码在按钮上/下切换 */
+void ui_left1_set_page_indicator_top(bool on_top)
+{
+    s_page_label_on_top = on_top;
+    if(s_page_label) {
+        if(on_top) lv_obj_align(s_page_label, LV_ALIGN_TOP_MID, 0, 0);
+        else       lv_obj_align(s_page_label, LV_ALIGN_BOTTOM_MID, 0, 0);
     }
 }
 
-static void fill_feed_page(void)
+/* ====== 面板构建 ====== */
+static void build_panel_a(lv_obj_t *parent)
 {
-    lv_obj_clear_flag(s_table_feed,  LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag  (s_table_alarm, LV_OBJ_FLAG_HIDDEN);
+    s_panel_a = lv_obj_create(parent);
+    lv_obj_clear_flag(s_panel_a, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(s_panel_a, 800, 400);
+    lv_obj_align(s_panel_a, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_add_flag(s_panel_a, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_add_event_cb(s_panel_a, key_event_cb, LV_EVENT_KEY, NULL);
 
-    lv_table_set_col_cnt(s_table_feed, 4);
-    clear_table_rows(s_table_feed, 4);
-    lv_table_set_cell_value(s_table_feed, 0, 0, "serial num");
-    lv_table_set_cell_value(s_table_feed, 0, 1, "time");
-    lv_table_set_cell_value(s_table_feed, 0, 2, "transport weight");
-    lv_table_set_cell_value(s_table_feed, 0, 3, "surplus weight");
-
-    lv_table_set_col_width(s_table_feed, 0, 100);
-    lv_table_set_col_width(s_table_feed, 1, 160);
-    lv_table_set_col_width(s_table_feed, 2, 200);
-    lv_table_set_col_width(s_table_feed, 3, 200);
-
-    size_t total = g_feed_cnt;
-    size_t pc    = page_count(total);
-    if ((size_t)s_page_idx >= pc) s_page_idx = (int)pc - 1;
-
-    for (uint16_t r = 1; r <= ROWS_PER_PAGE; ++r) {
-        long i = (long)total - 1 - (long)(s_page_idx * ROWS_PER_PAGE) - (long)(r - 1);
-        if (i >= 0 && (size_t)i < total) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "%u", g_feed[i].serial);
-            lv_table_set_cell_value(s_table_feed, r, 0, buf);
-            lv_table_set_cell_value(s_table_feed, r, 1, g_feed[i].time);
-            snprintf(buf, sizeof(buf), "%d", g_feed[i].transport_weight);
-            lv_table_set_cell_value(s_table_feed, r, 2, buf);
-            snprintf(buf, sizeof(buf), "%d", g_feed[i].surplus_weight);
-            lv_table_set_cell_value(s_table_feed, r, 3, buf);
-        }
-    }
+    rebuild_panel_3a_rows();
 }
 
-void history_ui_refresh(void)
+static void build_panel_b(lv_obj_t *parent)
 {
-    if(!s_root) return;
-    set_table_size_and_pos(s_table_alarm);
-    set_table_size_and_pos(s_table_feed);
+    s_panel_b = lv_obj_create(parent);
+    lv_obj_clear_flag(s_panel_b, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(s_panel_b, 800, 400);
+    lv_obj_align(s_panel_b, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_add_flag(s_panel_b, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_add_event_cb(s_panel_b, key_event_cb, LV_EVENT_KEY, NULL);
 
-    if (s_mode == MODE_ALARM) fill_alarm_page();
-    else                      fill_feed_page();
+    rebuild_panel_3b_rows();
 }
 
-/* ====== 事件回调 ====== */
-static void ev_page_up(lv_event_t *e)
+/* ====== 生命周期 ====== */
+void ui_left1_cleanup(void)
 {
-    LV_UNUSED(e);
-    s_page_idx++;         /* 更旧一页 */
-    history_ui_refresh();
-}
+    ui_keypad_close();
 
-static void ev_page_down(lv_event_t *e)
-{
-    LV_UNUSED(e);
-    if (s_page_idx > 0) s_page_idx--;  /* 更新一页，最小 0 */
-    history_ui_refresh();
-}
+    if(s_switch_btn) { lv_obj_del(s_switch_btn); s_switch_btn = NULL; }
+    if(s_page_ctrl)  { lv_obj_del(s_page_ctrl);  s_page_ctrl  = NULL; }
+    s_btn_up = s_btn_down = s_page_label = NULL;
 
-static void ev_switch_mode(lv_event_t *e)
-{
-    LV_UNUSED(e);
-    if (s_mode == MODE_ALARM) s_mode = MODE_FEED;
-    else                      s_mode = MODE_ALARM;
-    s_page_idx = 0; /* 切模式回到最新页 */
-    history_ui_refresh();
-}
-
-/* ====== UI 结构创建 ====== */
-static void create_buttons(lv_obj_t *parent)
-{
-    /* 右侧 Up */
-    s_btn_up = lv_btn_create(parent);
-    lv_obj_set_size(s_btn_up, 50, 50);
-    lv_obj_align(s_btn_up, LV_ALIGN_RIGHT_MID, -MARGIN_LR/2, -80);
-    lv_obj_add_event_cb(s_btn_up, ev_page_up, LV_EVENT_CLICKED, NULL);
-    lv_label_set_text(lv_label_create(s_btn_up), LV_SYMBOL_UP);
-
-    /* 右侧 Down */
-    s_btn_down = lv_btn_create(parent);
-    lv_obj_set_size(s_btn_down, 50, 50);
-    lv_obj_align(s_btn_down, LV_ALIGN_RIGHT_MID, -MARGIN_LR/2, 80);
-    lv_obj_add_event_cb(s_btn_down, ev_page_down, LV_EVENT_CLICKED, NULL);
-    lv_label_set_text(lv_label_create(s_btn_down), LV_SYMBOL_DOWN);
-
-    /* 右下角切换按钮（刷新图标） */
-    s_btn_switch = lv_btn_create(parent);
-    lv_obj_set_size(s_btn_switch, 60, 60);
-    lv_obj_set_style_radius(s_btn_switch, LV_RADIUS_CIRCLE, 0);
-    lv_obj_align(s_btn_switch, LV_ALIGN_BOTTOM_RIGHT, -MARGIN_LR, -MARGIN_TB);
-    lv_obj_add_event_cb(s_btn_switch, ev_switch_mode, LV_EVENT_CLICKED, NULL);
-    lv_label_set_text(lv_label_create(s_btn_switch), LV_SYMBOL_REFRESH);
-}
-
-static void create_tables(lv_obj_t *parent)
-{
-    s_table_alarm = lv_table_create(parent);
-    s_table_feed  = lv_table_create(parent);
-
-    /* 初始只显示报警表 */
-    lv_obj_add_flag(s_table_feed, LV_OBJ_FLAG_HIDDEN);
-
-    /* 先做一次布局，设置大小、列宽等 */
-    history_ui_refresh();
-}
-
-void history_ui_create(lv_obj_t *parent)
-{
-    /* 根容器（可选：你也可以直接把 table/按钮挂在 parent） */
-    s_root = lv_obj_create(parent);
-    lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(s_root, lv_obj_get_width(parent), lv_obj_get_height(parent));
-    lv_obj_align(s_root, LV_ALIGN_TOP_LEFT, 0, 0);
-
-    create_tables(s_root);
-    create_buttons(s_root);
-    s_mode = MODE_ALARM;
+    s_panel_a = NULL;
+    s_panel_b = NULL;
+    s_show_panel_a = true;
     s_page_idx = 0;
-    history_ui_refresh();
 }
 
-/* ====== 公共控制接口 ====== */
-void history_ui_switch_to_alarm(void)
+void ui_left1_create(lv_obj_t *center_container)
 {
-    s_mode = MODE_ALARM;
-    s_page_idx = 0;
-    history_ui_refresh();
-}
+    if(!center_container) return;
 
-void history_ui_switch_to_feed(void)
-{
-    s_mode = MODE_FEED;
-    s_page_idx = 0;
-    history_ui_refresh();
-}
+    build_panel_a(center_container);
+    build_panel_b(center_container);
 
-void history_ui_page_up(void)   { ev_page_up(NULL);   }
-void history_ui_page_down(void) { ev_page_down(NULL); }
+    /* 默认显示Panel A，Panel B隐藏 */
+    lv_obj_clear_flag(s_panel_a, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_panel_b, LV_OBJ_FLAG_HIDDEN);
 
-void history_ui_goto_last_page(void)
-{
-    size_t total = (s_mode == MODE_ALARM) ? g_alarm_cnt : g_feed_cnt;
-    size_t pc    = page_count(total);
-    if(pc == 0) pc = 1;
-    s_page_idx = 0;  /* 0 就是最新页（我们定义的显示方式） */
-    history_ui_refresh();
-}
+    /* 右下角A/B切换按钮（原逻辑保留） */
+    if(s_switch_btn) lv_obj_del(s_switch_btn);
+    s_switch_btn = lv_btn_create(lv_layer_top());
+    lv_obj_set_size(s_switch_btn, 64, 64);
+    lv_obj_set_style_radius(s_switch_btn, LV_RADIUS_CIRCLE, 0);
+    lv_obj_align(s_switch_btn, LV_ALIGN_BOTTOM_RIGHT, -20, -20);
+    lv_obj_add_event_cb(s_switch_btn, switch_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *icon = lv_label_create(s_switch_btn);
+    lv_label_set_text(icon, LV_SYMBOL_REFRESH);
+    lv_obj_center(icon);
 
-/* ====== 数据写入 ====== */
-static void strlcpy_safe(char *dst, const char *src, size_t dstsz)
-{
-    if(!dst || dstsz == 0) return;
-    if(!src) { dst[0] = '\0'; return; }
-    size_t n = strlen(src);
-    if(n >= dstsz) n = dstsz - 1;
-    memcpy(dst, src, n);
-    dst[n] = '\0';
-}
+    /* 右侧竖列：页码与上下按钮（仅Panel A可见） */
+    build_page_ctrl(center_container);
+    if(!s_show_panel_a && s_page_ctrl) lv_obj_add_flag(s_page_ctrl, LV_OBJ_FLAG_HIDDEN);
 
-void history_ui_clear_all(void)
-{
-    g_alarm_cnt = 0;
-    g_feed_cnt  = 0;
-    s_page_idx  = 0;
-    history_ui_refresh();
-}
+    update_page_label();
+    update_page_buttons_state();
 
-void history_ui_add_alarm(uint32_t serial,
-                          const char *start_time,
-                          const char *alarm_type)
-{
-    if (g_alarm_cnt < HISTORY_ALARM_MAX) {
-        g_alarm[g_alarm_cnt].serial = serial;
-        strlcpy_safe(g_alarm[g_alarm_cnt].start_time, start_time, sizeof(g_alarm[g_alarm_cnt].start_time));
-        strlcpy_safe(g_alarm[g_alarm_cnt].alarm_type, alarm_type, sizeof(g_alarm[g_alarm_cnt].alarm_type));
-        g_alarm_cnt++;
-    } else {
-        /* 简单“滚动”策略：丢掉最旧的一条 */
-        memmove(&g_alarm[0], &g_alarm[1], (HISTORY_ALARM_MAX-1)*sizeof(AlarmRecord));
-        g_alarm[HISTORY_ALARM_MAX-1].serial = serial;
-        strlcpy_safe(g_alarm[HISTORY_ALARM_MAX-1].start_time, start_time, sizeof(g_alarm[0].start_time));
-        strlcpy_safe(g_alarm[HISTORY_ALARM_MAX-1].alarm_type, alarm_type, sizeof(g_alarm[0].alarm_type));
-        g_alarm_cnt = HISTORY_ALARM_MAX;
+#if LV_USE_GROUP
+    /* 可选：加入默认group以接收↑/↓键 */
+    lv_group_t *g = lv_group_get_default();
+    if(g) {
+        lv_group_add_obj(g, s_panel_a);
+        lv_group_add_obj(g, s_panel_b);
+        lv_group_focus_obj(s_panel_a);
     }
-
-    /* 若当前显示报警模式且在最新页，直接刷新即可看到变化 */
-    if (s_mode == MODE_ALARM && s_page_idx == 0) history_ui_refresh();
+#endif
 }
 
-void history_ui_add_feed(uint32_t serial,
-                         const char *time,
-                         int transport_weight,
-                         int surplus_weight)
-{
-    if (g_feed_cnt < HISTORY_FEED_MAX) {
-        g_feed[g_feed_cnt].serial = serial;
-        strlcpy_safe(g_feed[g_feed_cnt].time, time, sizeof(g_feed[g_feed_cnt].time));
-        g_feed[g_feed_cnt].transport_weight = transport_weight;
-        g_feed[g_feed_cnt].surplus_weight   = surplus_weight;
-        g_feed_cnt++;
-    } else {
-        memmove(&g_feed[0], &g_feed[1], (HISTORY_FEED_MAX-1)*sizeof(FeedRecord));
-        g_feed[HISTORY_FEED_MAX-1].serial = serial;
-        strlcpy_safe(g_feed[HISTORY_FEED_MAX-1].time, time, sizeof(g_feed[0].time));
-        g_feed[HISTORY_FEED_MAX-1].transport_weight = transport_weight;
-        g_feed[HISTORY_FEED_MAX-1].surplus_weight   = surplus_weight;
-        g_feed_cnt = HISTORY_FEED_MAX;
-    }
-
-    if (s_mode == MODE_FEED && s_page_idx == 0) history_ui_refresh();
-}
-
-size_t history_ui_get_alarm_count(void) { return g_alarm_cnt; }
-size_t history_ui_get_feed_count(void)  { return g_feed_cnt;  }
+/* ====== 对外声明（供本文件内部引用静态符号） ======
+void rebuild_panel_a_rows(void);
+void rebuild_panel_b_rows(void);
+*/

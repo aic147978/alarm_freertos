@@ -1,5 +1,6 @@
 #include "ui_main.h"
 #include "ui_left1.h"
+#include "ui_history.h"
 
 #include <stdint.h>
 
@@ -8,6 +9,7 @@ static lv_obj_t *s_center_container = NULL;
 
 /** 底部导航栏按钮索引定义。 */
 #define NAV_IDX_FIRST_PAGE 0
+#define NAV_IDX_HISTORY    3  /**< 底部导航栏从右往左数第二个按钮。 */
 
 /**
  * @brief 底部导航按钮事件。
@@ -26,6 +28,12 @@ static void nav_btn_event_cb(lv_event_t *e)
         lv_obj_clean(s_center_container);
         ui_left1_create(s_center_container);
         break;
+
+            case NAV_IDX_HISTORY:
+        lv_obj_clean(s_center_container);
+        history_ui_create(s_center_container);
+        break;
+
 
     default:
         lv_obj_clean(s_center_container);
@@ -82,7 +90,13 @@ void ui_main_create(void)
         lv_obj_add_event_cb(btn, nav_btn_event_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
 
         lv_obj_t *label = lv_label_create(btn);
-        lv_label_set_text_fmt(label, "Btn%d", i + 1);
+        if(i == NAV_IDX_HISTORY) {
+            lv_label_set_text(label, "History");
+        } else if(i == NAV_IDX_FIRST_PAGE) {
+            lv_label_set_text(label, "Main");
+        } else {
+            lv_label_set_text_fmt(label, "Btn%d", i + 1);
+        }
         lv_obj_center(label);
     }
 

@@ -59,4 +59,4 @@ size_t history_ui_get_feed_count(void);
 } /*extern "C"*/
 #endif
 
-#endif /* HISTORY_UI_H */
+#endif /* UI_HISTORY_H */
