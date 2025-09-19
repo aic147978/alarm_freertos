@@ -1360,6 +1360,18 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="myGUI.h" />
+		<Unit filename="ui_keypad.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ui_keypad.h" />
+		<Unit filename="ui_left1.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ui_left1.h" />
+		<Unit filename="ui_main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ui_main.h" />
 		<Extensions>
 			<DoxyBlocks>
 				<comment_style block="0" line="0" />
