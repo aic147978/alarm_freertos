@@ -3,22 +3,68 @@
 #include "lvgl/lvgl.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
 
 lv_obj_t *g_center_container = NULL;
 
 
-extern void ui_left1_create(lv_obj_t *center_container);   // ×óÒ»°´Å¥¶ÔÓ¦µÄ½çÃæ
-static void create_ui(void);                             // ÄãµÄÖ÷½çÃæ¼ÓÔØº¯Êı
-extern lv_obj_t *g_center_container;                        // ÖĞÑëÈİÆ÷
+extern void ui_left1_create(lv_obj_t *center_container);   // å·¦ä¸€æŒ‰é’®å¯¹åº”çš„ç•Œé¢
+static void create_ui(void);                             // ä½ çš„ä¸»ç•Œé¢åŠ è½½å‡½æ•°
+extern lv_obj_t *g_center_container;                        // ä¸­å¤®å®¹å™¨
 
-/* ¿ÉÑ¡£ºÈç¹û¡°×óÒ»½çÃæ¡±ÔÚ¶¥²ã½¨ÁËĞü¸¡¿Ø¼ş£¨ÈçÇĞ»»Ô²Å¥/µ¯´°£©£¬
-   ÔÚËüµÄÊµÏÖÀïÌá¹©Õâ¸öÇåÀí¹³×Ó£»Ã»ÓĞ¾ÍºöÂÔ¡£ */
+static int g_left_set[5]      = { 0, 0, 10, 0, 0 };   // kg
+static int g_left_time_s[5]   = {10,10,10,10,10};   // ç§’
+static int g_right_set[5]     = { 0, 0, 0, 0, 0 };
+static int g_right_time_s[5]  = {10,10,10,10,10};
+
+static int g_start_sec[5]     = {0};                // mm:ss å­˜æˆâ€œç§’â€
+static int g_end_sec[5]       = {0};
+static bool g_row_enable[5]   = {false};            // å¤é€‰æ¡†æ˜¯å¦æ‰“å‹¾
+
+
+typedef struct {
+    lv_obj_t *label;     // ç•Œé¢ä¸Šçš„ label
+    int      *var;       // ç»‘å®šçš„å˜é‡åœ°å€
+    const char *suffix;  // å•ä½ (å¦‚ "kg" / "s")
+    bool is_time;        // æ˜¯å¦æ˜¯æ—¶é—´
+} bind_entry_t;
+
+static bool s_block_click = false;
+
+static void unblock_cb(lv_timer_t *t){
+    s_block_click = false;
+    lv_timer_del(t);
+}
+/* å¯é€‰ï¼šå¦‚æœâ€œå·¦ä¸€ç•Œé¢â€åœ¨é¡¶å±‚å»ºäº†æ‚¬æµ®æ§ä»¶ï¼ˆå¦‚åˆ‡æ¢åœ†é’®/å¼¹çª—ï¼‰ï¼Œ
+   åœ¨å®ƒçš„å®ç°é‡Œæä¾›è¿™ä¸ªæ¸…ç†é’©å­ï¼›æ²¡æœ‰å°±å¿½ç•¥ã€‚ */
 __attribute__((weak)) void ui_left1_cleanup(void) {}
 
-/* ×Ô¶¨ÒåÓ³Éä£ºÄÄ¸öµ×À¸°´Å¥½ø×óÒ»½çÃæ¡¢ÄÄ¸ö»ØÖ÷½çÃæ */
+/* è‡ªå®šä¹‰æ˜ å°„ï¼šå“ªä¸ªåº•æ æŒ‰é’®è¿›å·¦ä¸€ç•Œé¢ã€å“ªä¸ªå›ä¸»ç•Œé¢ */
 #define NAV_IDX_FIRST_PAGE   0
 #define NAV_IDX_GO_HOME      5
 
+static void set_label_from_var(bind_entry_t *e)
+{
+    if(!e || !e->label || !e->var) return;
+    char buf[16];
+
+    if(e->is_time) {
+        int mm = (*e->var) / 60;
+        int ss = (*e->var) % 60;
+        lv_snprintf(buf, sizeof(buf), "%02d:%02d", mm, ss);
+    } else {
+        if(e->suffix) lv_snprintf(buf, sizeof(buf), "%d%s", *e->var, e->suffix);
+        else          lv_snprintf(buf, sizeof(buf), "%d", *e->var);
+    }
+    lv_label_set_text(e->label, buf);
+}
+
+static void eat_all_cb(lv_event_t *e){
+    // åæ‰æ‰€æœ‰äº‹ä»¶ï¼Œé˜²æ­¢ç»§ç»­ä¼ ç»™ä¸‹å±‚
+//    lv_event_stop_bubbling(e);
+//    lv_event_stop_processing(e);
+}
 
 static void nav_btn_event_cb(lv_event_t * e)
 {
@@ -26,21 +72,21 @@ static void nav_btn_event_cb(lv_event_t * e)
     LV_LOG_USER("nav btn %lu clicked", (unsigned long)idx);
     if(!g_center_container) return;
 
-    /* Àë¿ªµ±Ç°Ò³ÃæÇ°µÄÇåÀí£¨ÈçÉ¾³ı¶¥²ãĞü¸¡¿Ø¼ş¡¢¹Ø±Õµ¯´°µÈ£© */
+    /* ç¦»å¼€å½“å‰é¡µé¢å‰çš„æ¸…ç†ï¼ˆå¦‚åˆ é™¤é¡¶å±‚æ‚¬æµ®æ§ä»¶ã€å…³é—­å¼¹çª—ç­‰ï¼‰ */
     ui_left1_cleanup();
 
     switch(idx) {
-    case NAV_IDX_FIRST_PAGE:      /* ×ó±ßµÚÒ»¸ö°´Å¥ ¡ú ½øÈë¶ÔÓ¦½çÃæ */
-        lv_obj_clean(g_center_container);                 // Çå¿ÕÖĞÑëÇøÓò
-        ui_left1_create(g_center_container);              // ¹¹½¨×óÒ»½çÃæ
+    case NAV_IDX_FIRST_PAGE:      /* å·¦è¾¹ç¬¬ä¸€ä¸ªæŒ‰é’® â†’ è¿›å…¥å¯¹åº”ç•Œé¢ */
+        lv_obj_clean(g_center_container);                 // æ¸…ç©ºä¸­å¤®åŒºåŸŸ
+        ui_left1_create(g_center_container);              // æ„å»ºå·¦ä¸€ç•Œé¢
         break;
 
-    case NAV_IDX_GO_HOME:         /* »Øµ½Ö÷½çÃæ */
+    case NAV_IDX_GO_HOME:         /* å›åˆ°ä¸»ç•Œé¢ */
         lv_obj_clean(g_center_container);
        create_ui();
         break;
 
-    default:                      /* ÆäËü°´Å¥£ºÕ¼Î»£¨ÒÔºóÔÙ½ÓÈë£© */
+    default:                      /* å…¶å®ƒæŒ‰é’®ï¼šå ä½ï¼ˆä»¥åå†æ¥å…¥ï¼‰ */
     {
         lv_obj_clean(g_center_container);
         lv_obj_t *hint = lv_label_create(g_center_container);
@@ -52,7 +98,14 @@ static void nav_btn_event_cb(lv_event_t * e)
 }
 
 
-/* »Øµ÷£º°´Å¥µã»÷ */
+static void cb_event_cb(lv_event_t *e)
+{
+    lv_obj_t *cb = lv_event_get_target(e);
+    bool *var = (bool*)lv_event_get_user_data(e);
+    if(var) *var = lv_obj_has_state(cb, LV_STATE_CHECKED);
+}
+
+/* å›è°ƒï¼šæŒ‰é’®ç‚¹å‡» */
 
 
 extern void ui_left1_create(lv_obj_t *center_container);
@@ -64,7 +117,7 @@ static void menu_btn_event_cb(lv_event_t * e)
     LV_LOG_USER("Home button clicked");
 }
 
-/* ´´½¨½çÃæ */
+/* åˆ›å»ºç•Œé¢ */
 void create_ui(void)
 {
     lv_obj_t * scr = lv_scr_act();
@@ -72,11 +125,11 @@ void create_ui(void)
 
         if(!g_center_container) {
         g_center_container = lv_obj_create(scr);
-        lv_obj_set_size(g_center_container, 800, 400);   // ÄãĞèÒªµ÷ÕûºÏÊÊµÄ´óĞ¡
+        lv_obj_set_size(g_center_container, 800, 400);   // ä½ éœ€è¦è°ƒæ•´åˆé€‚çš„å¤§å°
         lv_obj_align(g_center_container, LV_ALIGN_TOP_MID, 0, 0);
         lv_obj_clear_flag(g_center_container, LV_OBJ_FLAG_SCROLLABLE);
     }
-    /* µ×²¿µ¼º½À¸±³¾° */
+    /* åº•éƒ¨å¯¼èˆªæ èƒŒæ™¯ */
     lv_obj_t * nav_bar = lv_obj_create(scr);
     lv_obj_set_size(nav_bar, 800, 80);
     lv_obj_align(nav_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
@@ -85,12 +138,12 @@ void create_ui(void)
                               LV_PART_MAIN);
     lv_obj_clear_flag(nav_bar, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* ´´½¨ 4 ¸ö¾ØĞÎ°´Å¥ */
+    /* åˆ›å»º 4 ä¸ªçŸ©å½¢æŒ‰é’® */
     for (int i = 0; i < 4; i++) {
         lv_obj_t * btn = lv_btn_create(nav_bar);
         lv_obj_set_size(btn, 120, 50);
 
-        /* Á½¸ö·Å×ó±ß¡¢Á½¸ö·ÅÓÒ±ß */
+        /* ä¸¤ä¸ªæ”¾å·¦è¾¹ã€ä¸¤ä¸ªæ”¾å³è¾¹ */
         if(i < 2) {
             lv_obj_align(btn, LV_ALIGN_LEFT_MID, 20 + i * 140, 0);
         } else {
@@ -105,7 +158,7 @@ void create_ui(void)
         lv_obj_center(label);
     }
 
-    /* ÖĞÑëÔ²ĞÎ Home °´Å¥ */
+    /* ä¸­å¤®åœ†å½¢ Home æŒ‰é’® */
     lv_obj_t * home_btn = lv_btn_create(scr);
     lv_obj_set_size(home_btn, 80, 80);
     lv_obj_set_style_radius(home_btn, LV_RADIUS_CIRCLE, 0);
@@ -113,77 +166,112 @@ void create_ui(void)
     lv_obj_add_event_cb(home_btn, menu_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t * home_label = lv_label_create(home_btn);
-    lv_label_set_text(home_label, LV_SYMBOL_HOME);  // LVGL ÄÚÖÃ Home Í¼±ê
+    lv_label_set_text(home_label, LV_SYMBOL_HOME);  // LVGL å†…ç½® Home å›¾æ ‡
     lv_obj_center(home_label);
 }
 
-/* ---------- Ç°ÖÃ£º¾Å¹¬¸ñ¼üÅÌÉÏÏÂÎÄ ---------- */
+/* ---------- å‰ç½®ï¼šä¹å®«æ ¼é”®ç›˜ä¸Šä¸‹æ–‡ ---------- */
 typedef struct {
-    lv_obj_t *target_label;       // ±»±à¼­µÄÏÔÊ¾±êÇ©
-    bool      is_time_mmss;       // true=¸ñÊ½ mm:ss, false=ÆÕÍ¨Êı×Ö
-    const char *suffix;           // µ¥Î»£ºÈç "kg" / "s" / ""£¨Ê±¼ä²»ÓÃ£©
-    uint8_t   max_digits;         // ÔÊĞíÊäÈëµÄ´¿Êı×ÖÎ»Êı£¨Ê±¼äÍ¨³£ 4£©
+    lv_obj_t *target_label;       // è¢«ç¼–è¾‘ labelï¼ˆå¯é€‰ï¼‰
+    bool      is_time_mmss;
+    const char *suffix;
+    uint8_t   max_digits;
+
+    bind_entry_t *entry;          // â­ ç»‘å®šå¯¹è±¡ï¼ˆå˜é‡+labelï¼‰
 } keypad_ctx_t;
 
-static lv_obj_t *s_panel_a = NULL;     // ×Ó½çÃæ A£¨Í¼1£©
-static lv_obj_t *s_panel_b = NULL;     // ×Ó½çÃæ B£¨Í¼2£©
-static bool      s_show_a  = true;     // µ±Ç°ÏÔÊ¾ A »¹ÊÇ B
-static lv_obj_t *s_switch_btn = NULL;  // ÓÒÏÂ½ÇÔ²ĞÎÇĞ»»°´Å¥
-static lv_obj_t *s_modal = NULL;       // ¼üÅÌÃÉ²ã
-static lv_obj_t *s_kb_box = NULL;      // ¼üÅÌºĞ
-static lv_obj_t *s_ta = NULL;          // ¼üÅÌÊäÈë¿ò
-static keypad_ctx_t s_kp = {0};        // ¼üÅÌÉÏÏÂÎÄ£¨µ±Ç°±à¼­Ä¿±ê£©
+static lv_obj_t *s_panel_a = NULL;     // å­ç•Œé¢ Aï¼ˆå›¾1ï¼‰
+static lv_obj_t *s_panel_b = NULL;     // å­ç•Œé¢ Bï¼ˆå›¾2ï¼‰
+static bool      s_show_a  = true;     // å½“å‰æ˜¾ç¤º A è¿˜æ˜¯ B
+static lv_obj_t *s_switch_btn = NULL;  // å³ä¸‹è§’åœ†å½¢åˆ‡æ¢æŒ‰é’®
+static lv_obj_t *s_modal = NULL;       // é”®ç›˜è’™å±‚
+static lv_obj_t *s_kb_box = NULL;      // é”®ç›˜ç›’
+static lv_obj_t *s_ta = NULL;          // é”®ç›˜è¾“å…¥æ¡†
+static keypad_ctx_t s_kp = {0};        // é”®ç›˜ä¸Šä¸‹æ–‡ï¼ˆå½“å‰ç¼–è¾‘ç›®æ ‡ï¼‰
 
-/* ---------- ¹¤¾ß£º½«´¿Êı×Ö¸ñÊ½»¯Îª mm:ss ---------- */
+/* ---------- å·¥å…·ï¼šå°†çº¯æ•°å­—æ ¼å¼åŒ–ä¸º mm:ss ---------- */
 static void fmt_mmss(const char *digits, char *out, size_t out_sz)
 {
-    // È¡×îºó 4 Î»£¬²»×ã×ó²à²¹ 0
+    // å–æœ€å 4 ä½ï¼Œä¸è¶³å·¦ä¾§è¡¥ 0
     char buf[5] = "0000";
     size_t n = strlen(digits);
     if(n > 4) digits += (n - 4), n = 4;
     memcpy(buf + (4 - n), digits, n);
     int mm = (buf[0]-'0')*10 + (buf[1]-'0');
     int ss = (buf[2]-'0')*10 + (buf[3]-'0');
-    if(ss > 59) ss = 59;   // ¼òµ¥Ô¼Êø
+    if(ss > 59) ss = 59;   // ç®€å•çº¦æŸ
     lv_snprintf(out, out_sz, "%02d:%02d", mm, ss);
 }
 
-/* ---------- ¼üÅÌµ¯´°£º¹Ø±Õ ---------- */
+/* ---------- é”®ç›˜å¼¹çª—ï¼šå…³é—­ ---------- */
 static void keypad_close(void)
 {
-    if(s_modal) { lv_obj_del(s_modal); s_modal = NULL; s_kb_box = NULL; s_ta = NULL; }
-    memset(&s_kp, 0, sizeof(s_kp));
+    if(s_modal) {
+        /* reset active input device so the originating button won't re-trigger */
+        lv_indev_reset(lv_indev_get_act(), NULL);
+        lv_obj_del(s_modal);
+
+        s_kb_box = NULL;
+        s_ta = NULL;
+    }
+  //  memset(&s_kp, 0, sizeof(s_kp));
+    s_block_click = true;
+    lv_timer_create(unblock_cb, 300, NULL);
+ s_modal = NULL;
 }
 
-/* ---------- ¼üÅÌ°´Å¥ÊÂ¼ş ---------- */
+/* ---------- é”®ç›˜æŒ‰é’®äº‹ä»¶ ---------- */
 static void kb_btnm_event_cb(lv_event_t *e)
 {
     lv_obj_t *btnm = lv_event_get_target(e);
     const char *txt = lv_btnmatrix_get_btn_text(btnm, lv_btnmatrix_get_selected_btn(btnm));
     if(!txt) return;
 
-    if(strcmp(txt, "OK") == 0) {
-        // ¶ÁÈ¡ÊäÈë²¢Ğ´»ØÄ¿±ê±êÇ©
-        const char *in = lv_textarea_get_text(s_ta);
-        char out[16] = {0};
-        if(s_kp.is_time_mmss) {
-            fmt_mmss(in, out, sizeof(out));
+        LV_LOG_USER("Key pressed: %s", txt);   // â† æ‰“å°æŒ‰ä¸‹çš„é”®
+
+if(strcmp(txt, "OK") == 0) {
+    const char *in = lv_textarea_get_text(s_ta);
+    LV_LOG_USER("Input confirmed: %s", in);
+
+    bind_entry_t *entry = s_kp.entry;
+    if(entry) {
+        if(entry->is_time) {
+            char buf4[5] = "0000";
+            size_t n = strlen(in);
+            if(n > 4) { in += (n - 4); n = 4; }
+            memcpy(buf4 + (4 - n), in, n);
+            int mm = (buf4[0]-'0')*10 + (buf4[1]-'0');
+            int ss = (buf4[2]-'0')*10 + (buf4[3]-'0');
+            if(ss > 59) ss = 59;
+            if(entry->var) *entry->var = mm * 60 + ss;
         } else {
-            // ÏŞ³¤
-            char digits[10] = {0};
-            size_t len = LV_MIN(strlen(in), s_kp.max_digits);
-            memcpy(digits, in, len);
-            if(s_kp.suffix) lv_snprintf(out, sizeof(out), "%s%s", digits, s_kp.suffix);
-            else            lv_snprintf(out, sizeof(out), "%s",   digits);
+            int val = atoi(in);
+            if(entry->var) *entry->var = val;
         }
-        if(s_kp.target_label) lv_label_set_text(s_kp.target_label, out);
-        keypad_close();
-    } else if(strcmp(txt, "<-") == 0) {
+
+        // â­ åˆ·æ–° label
+        set_label_from_var(entry);
+
+        // â­ æ‰“å°ç¡®è®¤ï¼šå“ªä¸€ä¸ª label è¢«æ›´æ–°äº†
+        LV_LOG_USER("Update label=%p var=%p value=%d",
+                    (void*)entry->label,
+                    (void*)entry->var,
+                    entry->var ? *entry->var : -1);
+
+        // â­ å¼ºåˆ¶é‡ç»˜
+        lv_obj_invalidate(entry->label);
+    }
+
+    keypad_close();
+    return;
+}else if(strcmp(txt, "<-") == 0) {
+            LV_LOG_USER("Backspace");
         lv_textarea_del_char(s_ta);
     } else if(strcmp(txt, "C") == 0) {
+                LV_LOG_USER("Clear input");
         lv_textarea_set_text(s_ta, "");
     } else {
-        // ÏŞÖÆÊäÈë×î´óÎ»Êı£¨½ö¶Ô´¿Êı×ÖÎ»¼ÆÊı£©
+        // é™åˆ¶è¾“å…¥æœ€å¤§ä½æ•°ï¼ˆä»…å¯¹çº¯æ•°å­—ä½è®¡æ•°ï¼‰
         const char *cur = lv_textarea_get_text(s_ta);
         size_t cur_digits = strlen(cur);
         if(s_kp.is_time_mmss) {
@@ -196,38 +284,63 @@ static void kb_btnm_event_cb(lv_event_t *e)
     }
 }
 
-/* ---------- ´ò¿ª¾Å¹¬¸ñ¼üÅÌ£¨Êı×Ö/Ê±¼äÍ¨ÓÃ£© ---------- */
+/* ---------- æ‰“å¼€ä¹å®«æ ¼é”®ç›˜ï¼ˆæ•°å­—/æ—¶é—´é€šç”¨ï¼‰ ---------- */
 static void keypad_open(lv_obj_t *target_label, bool is_time_mmss, const char *suffix, uint8_t max_digits)
 {
-    keypad_close(); // ÏÈ±£Ö¤¸É¾»
+
+    // keypad_open é‡Œé¢„å¡«ä¹‹å‰åŠ 
+LV_LOG_USER("Open keypad: entry=%p label=%p var=%p is_time=%d",
+            (void*)s_kp.entry,
+            s_kp.entry ? (void*)s_kp.entry->label : NULL,
+            s_kp.entry ? (void*)s_kp.entry->var : NULL,
+            (int)is_time_mmss);
+
+
+    keypad_close();
     s_kp.target_label = target_label;
     s_kp.is_time_mmss = is_time_mmss;
     s_kp.suffix       = suffix;
     s_kp.max_digits   = max_digits;
 
-    s_modal = lv_obj_create(lv_layer_top());              // ¸²¸Ç²ã
+    s_modal = lv_obj_create(lv_layer_top());
     lv_obj_remove_style_all(s_modal);
     lv_obj_set_size(s_modal, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_style_bg_color(s_modal, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(s_modal, LV_OPA_50, 0);
+    lv_obj_add_flag(s_modal, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_modal, eat_all_cb, LV_EVENT_ALL, NULL); // â­
 
-    s_kb_box = lv_obj_create(s_modal);                    // ¾ÓÖĞ°×¿ò
+    s_kb_box = lv_obj_create(s_modal);
     lv_obj_set_size(s_kb_box, LV_HOR_RES * 3 / 5, LV_VER_RES * 3 / 5);
     lv_obj_center(s_kb_box);
 
-    s_ta = lv_textarea_create(s_kb_box);                  // ÊäÈë¿ò
+    s_ta = lv_textarea_create(s_kb_box);
     lv_obj_set_width(s_ta, lv_pct(90));
     lv_obj_align(s_ta, LV_ALIGN_TOP_MID, 0, 10);
     lv_textarea_set_one_line(s_ta, true);
     lv_textarea_set_password_mode(s_ta, false);
     lv_textarea_set_max_length(s_ta, max_digits);
 
-    // ¾Å¹¬¸ñ¼üÅÌ£¨×Ô¶¨Òå btnmatrix£©
+    // â­ ç”¨å½“å‰å˜é‡é¢„å¡«
+    if(s_kp.entry && s_kp.entry->var){
+        char pre[8] = {0};
+        if(is_time_mmss){
+            int mm = (*s_kp.entry->var) / 60;
+            int ss = (*s_kp.entry->var) % 60;
+            // é¢„å¡«ä¸º mmssï¼ˆé¿å… â€œ:â€ å½±å“çº¯æ•°å­—é”®å…¥ï¼‰
+            lv_snprintf(pre, sizeof(pre), "%02d%02d", mm, ss);
+        }else{
+            lv_snprintf(pre, sizeof(pre), "%d", *s_kp.entry->var);
+        }
+        lv_textarea_set_text(s_ta, pre);
+        lv_textarea_cursor_right(s_ta);
+    }
+
     static const char *map[] = {
-        "1", "2", "3", "\n",
-        "4", "5", "6", "\n",
-        "7", "8", "9", "\n",
-        "<-", "0", "C", "OK", ""
+        "1","2","3","\n",
+        "4","5","6","\n",
+        "7","8","9","\n",
+        "<-","0","C","OK",""
     };
     lv_obj_t *btnm = lv_btnmatrix_create(s_kb_box);
     lv_btnmatrix_set_map(btnm, map);
@@ -236,113 +349,159 @@ static void keypad_open(lv_obj_t *target_label, bool is_time_mmss, const char *s
     lv_obj_add_event_cb(btnm, kb_btnm_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
 
-/* ---------- ÊıÖµ¿òµã»÷£ºÈıÖÖ°ü×°»Øµ÷ ---------- */
-static void num_kg_event_cb(lv_event_t *e){ keypad_open((lv_obj_t*)lv_event_get_user_data(e), false, "kg", 3); }
-static void num_s_event_cb (lv_event_t *e){ keypad_open((lv_obj_t*)lv_event_get_user_data(e), false, "s",  3); }
-static void time_event_cb  (lv_event_t *e){ keypad_open((lv_obj_t*)lv_event_get_user_data(e), true,  NULL, 4); }
-
-/* ---------- ¹¤¾ß£º´´½¨¡°À¶É«ÊıÖµ°´Å¥¡±²¢·µ»ØÖĞ¼äµÄ label ---------- */
-static lv_obj_t* make_value_btn(lv_obj_t *parent, const char *init, lv_event_cb_t cb)
-{
-    lv_obj_t *btn = lv_btn_create(parent);
-    lv_obj_set_size(btn, 160, 48);
-    lv_obj_t *lab = lv_label_create(btn);
-    lv_label_set_text(lab, init);
-    lv_obj_center(lab);
-    // µã»÷ºóµ¯¼üÅÌ£¬»Øµ÷µÄ user_data ´« label Ö¸Õë
-    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, lab);
-    return lab; // ·½±ãµ÷ÓÃ´¦±£´æ/ºóĞø¸üĞÂ
+/* ---------- æ•°å€¼æ¡†ç‚¹å‡»ï¼šä¸‰ç§åŒ…è£…å›è°ƒ ---------- */
+static void num_kg_event_cb(lv_event_t *e){
+    if(s_block_click) return;
+    bind_entry_t *entry = (bind_entry_t*)lv_event_get_user_data(e);
+    s_kp.entry = entry;
+    keypad_open(entry->label, false, entry->suffix, 3);
 }
 
-/* ---------- ×Ó½çÃæ A£º×óÓÒ¸÷ 5 ĞĞ£¨Ã¿ĞĞ£º±àºÅ¡¢set¡¢time£© ---------- */
+static void num_s_event_cb (lv_event_t *e){
+    if(s_block_click) return;
+    bind_entry_t *entry = (bind_entry_t*)lv_event_get_user_data(e);
+    s_kp.entry = entry;
+    keypad_open(entry->label, false, entry->suffix, 3);
+}
+
+static void time_event_cb  (lv_event_t *e){
+    if(s_block_click) return;
+    bind_entry_t *entry = (bind_entry_t*)lv_event_get_user_data(e);
+    s_kp.entry = entry;
+    keypad_open(entry->label, true,  NULL, 4);
+}
+
+/* åˆ›å»ºâ€œå·²ç»‘å®šå˜é‡â€çš„æŒ‰é’®ï¼Œå¹¶è¿”å›ä¸­é—´çš„ label */
+static lv_obj_t* make_bound_value_btn(lv_obj_t *parent,
+                                      int *bind_var,
+                                      const char *suffix,
+                                      bool is_time,
+                                      lv_event_cb_t cb)
+{
+    lv_obj_t *btn = lv_btn_create(parent);
+    lv_obj_set_size(btn, 120, 40);
+
+    lv_obj_t *lab = lv_label_create(btn);
+    lv_obj_center(lab);
+
+    // åˆ†é…å¹¶è®°å½•ç»‘å®š
+    bind_entry_t *entry = lv_mem_alloc(sizeof(bind_entry_t));
+    entry->label  = lab;
+    entry->var    = bind_var;
+    entry->suffix = suffix;
+    entry->is_time = is_time;
+
+    // é¦–æ¬¡æŒ‰å˜é‡å€¼æ¸²æŸ“
+    set_label_from_var(entry);
+
+    // ç‚¹å‡»æ—¶æŠŠ entry ä¼ ç»™äº‹ä»¶å›è°ƒ
+    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, entry);
+    return lab;
+}
+
+/* ---------- å­ç•Œé¢ Aï¼šå·¦å³å„ 5 è¡Œï¼ˆæ¯è¡Œï¼šç¼–å·ã€setã€timeï¼‰ ---------- */
 static void build_panel_a(lv_obj_t *parent)
 {
     s_panel_a = lv_obj_create(parent);
     lv_obj_clear_flag(s_panel_a, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(s_panel_a, lv_obj_get_width(parent), lv_obj_get_height(parent));
+    lv_obj_set_size(s_panel_a, 800, 400);
     lv_obj_align(s_panel_a, LV_ALIGN_TOP_MID, 0, 0);
 
-    // Á½ÁĞ±êÌâ
-    lv_obj_t *t1 = lv_label_create(s_panel_a); lv_label_set_text(t1, "left  set   time");
-    lv_obj_align(t1, LV_ALIGN_TOP_LEFT, 80, 40);
-    lv_obj_t *t2 = lv_label_create(s_panel_a); lv_label_set_text(t2, "right set   time");
-    lv_obj_align(t2, LV_ALIGN_TOP_RIGHT, -320, 40);
+    // æ ‡é¢˜
+    lv_obj_t *t1 = lv_label_create(s_panel_a);
+    lv_label_set_text(t1, "left  set                              time");
+    lv_obj_align(t1, LV_ALIGN_TOP_LEFT, 105, 10);
 
-    // ×óÁĞ 5 ĞĞ
-    for(int r=0; r<5; r++){
-        // ĞĞºÅ
+    lv_obj_t *t2 = lv_label_create(s_panel_a);
+    lv_label_set_text(t2, "right set                             time");
+    lv_obj_align(t2, LV_ALIGN_TOP_RIGHT, -80, 10);
+
+    int row_cnt = 5;
+    int top_margin = 50;
+    int available_h = 370 - top_margin - 10;
+    int row_space = available_h / row_cnt;
+
+    // å·¦åˆ—
+    for(int r=0; r<row_cnt; r++){
+        int y = top_margin + r * row_space;
+
         lv_obj_t *idx = lv_label_create(s_panel_a);
         lv_label_set_text_fmt(idx, "%d.", r+1);
-        lv_obj_align(idx, LV_ALIGN_TOP_LEFT, 40, 100 + r*80);
+        lv_obj_align(idx, LV_ALIGN_TOP_LEFT, 60, y);
 
-        // set£¨kg£©
-        lv_obj_t *lab_set = make_value_btn(s_panel_a, "0kg", num_kg_event_cb);
-        lv_obj_align(lab_set->parent, LV_ALIGN_TOP_LEFT, 120, 88 + r*80);
+        // ç»‘å®š g_left_set[r] å’Œ g_left_time_s[r]
+        lv_obj_t *lab_set  = make_bound_value_btn(s_panel_a, &g_left_set[r],     "kg", false, num_kg_event_cb);
+        lv_obj_align(lab_set->parent, LV_ALIGN_TOP_LEFT,  80,  y - 10);
 
-        // time£¨s£©
-        lv_obj_t *lab_time = make_value_btn(s_panel_a, "10s", num_s_event_cb);
-        lv_obj_align(lab_time->parent, LV_ALIGN_TOP_LEFT, 320, 88 + r*80);
+        lv_obj_t *lab_time = make_bound_value_btn(s_panel_a, &g_left_time_s[r],  "s",  false, num_s_event_cb);
+        lv_obj_align(lab_time->parent, LV_ALIGN_TOP_LEFT, 240, y - 10);
     }
 
-    // ÓÒÁĞ 5 ĞĞ
-    for(int r=0; r<5; r++){
+    // å³åˆ—
+    for(int r=0; r<row_cnt; r++){
+        int y = top_margin + r * row_space;
+
         lv_obj_t *idx = lv_label_create(s_panel_a);
         lv_label_set_text_fmt(idx, "%d.", r+1);
-        lv_obj_align(idx, LV_ALIGN_TOP_RIGHT, -480, 100 + r*80);
+        lv_obj_align(idx, LV_ALIGN_TOP_LEFT, 420, y);
 
-        lv_obj_t *lab_set = make_value_btn(s_panel_a, "0kg", num_kg_event_cb);
-        lv_obj_align(lab_set->parent, LV_ALIGN_TOP_RIGHT, -360, 88 + r*80);
+        lv_obj_t *lab_set  = make_bound_value_btn(s_panel_a, &g_right_set[r],    "kg", false, num_kg_event_cb);
+        lv_obj_align(lab_set->parent, LV_ALIGN_TOP_LEFT,  440, y - 10);
 
-        lv_obj_t *lab_time = make_value_btn(s_panel_a, "10s", num_s_event_cb);
-        lv_obj_align(lab_time->parent, LV_ALIGN_TOP_RIGHT, -160, 88 + r*80);
+        lv_obj_t *lab_time = make_bound_value_btn(s_panel_a, &g_right_time_s[r], "s",  false, num_s_event_cb);
+        lv_obj_align(lab_time->parent, LV_ALIGN_TOP_LEFT, 600, y - 10);
     }
 }
 
-/* ---------- ¸´Ñ¡¿òµã»÷£º¿Õ/¶ÔºÅ£¨lv_checkbox ×Ô´ø£© ---------- */
-static void cb_event_cb(lv_event_t *e)
-{
-    lv_obj_t *cb = lv_event_get_target(e);
-    LV_LOG_USER("row %d checked=%d", (int)(uintptr_t)lv_event_get_user_data(e),
-                lv_obj_has_state(cb, LV_STATE_CHECKED));
-}
 
-/* ---------- ×Ó½çÃæ B£º×óÓÒ¸÷ 5 ĞĞ£¨start time / end time + ¸´Ñ¡¿ò£© ---------- */
+/* ---------- å­ç•Œé¢ Bï¼šå·¦å³å„ 5 è¡Œï¼ˆstart time / end time + å¤é€‰æ¡†ï¼‰ ---------- */
 static void build_panel_b(lv_obj_t *parent)
 {
     s_panel_b = lv_obj_create(parent);
     lv_obj_clear_flag(s_panel_b, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(s_panel_b, lv_obj_get_width(parent), lv_obj_get_height(parent));
+    lv_obj_set_size(s_panel_b, 800, 400);
     lv_obj_align(s_panel_b, LV_ALIGN_TOP_MID, 0, 0);
 
-    // ±êÌâ
-    lv_obj_t *t1 = lv_label_create(s_panel_b); lv_label_set_text(t1, "start time"); lv_obj_align(t1, LV_ALIGN_TOP_LEFT, 160, 40);
-    lv_obj_t *t2 = lv_label_create(s_panel_b); lv_label_set_text(t2, "end time");   lv_obj_align(t2, LV_ALIGN_TOP_RIGHT, -260, 40);
+    // æ ‡é¢˜
+    lv_obj_t *t1 = lv_label_create(s_panel_b);
+    lv_label_set_text(t1, "start time");
+    lv_obj_align(t1, LV_ALIGN_TOP_LEFT, 160, 10);
 
-    for(int r=0; r<5; r++){
-        // ĞĞºÅ£¨×ó²à£©
+    lv_obj_t *t2 = lv_label_create(s_panel_b);
+    lv_label_set_text(t2, "end time");
+    lv_obj_align(t2, LV_ALIGN_TOP_RIGHT, -260, 10);
+
+    int row_cnt = 5;
+    int top_margin = 50;
+    int available_h = 400 - top_margin - 20;
+    int row_space = available_h / row_cnt;
+
+    for(int r=0; r<row_cnt; r++){
+        int y = top_margin + r * row_space;
+
         lv_obj_t *idx_l = lv_label_create(s_panel_b);
         lv_label_set_text_fmt(idx_l, "%d.", r+1);
-        lv_obj_align(idx_l, LV_ALIGN_TOP_LEFT, 120, 100 + r*80);
+        lv_obj_align(idx_l, LV_ALIGN_TOP_LEFT, 120, y);
 
-        // ×óÁĞÊ±¼ä
-        lv_obj_t *lab_start = make_value_btn(s_panel_b, "00:00", time_event_cb);
-        lv_obj_align(lab_start->parent, LV_ALIGN_TOP_LEFT, 160, 88 + r*80);
+        // ç»‘å®šæ—¶é—´ï¼ˆä»¥ç§’ä¸ºå•ä½ï¼‰
+        lv_obj_t *lab_start = make_bound_value_btn(s_panel_b, &g_start_sec[r], NULL, true, time_event_cb);
+        lv_obj_align(lab_start->parent, LV_ALIGN_TOP_LEFT, 160, y - 10);
 
-        // ÓÒÁĞÊ±¼ä
-        lv_obj_t *lab_end   = make_value_btn(s_panel_b, "00:00", time_event_cb);
-        lv_obj_align(lab_end->parent, LV_ALIGN_TOP_RIGHT, -260, 88 + r*80);
+        lv_obj_t *lab_end   = make_bound_value_btn(s_panel_b, &g_end_sec[r],   NULL, true, time_event_cb);
+        lv_obj_align(lab_end->parent, LV_ALIGN_TOP_RIGHT, -260, y - 10);
 
-        // ¸´Ñ¡¿ò
+        // å¤é€‰æ¡† â†’ ç›´æ¥æŠŠ bool* ä¼ ä½œ user_data
         lv_obj_t *cb = lv_checkbox_create(s_panel_b);
-        lv_checkbox_set_text(cb, "");                  // Ö»ÏÔÊ¾¿ò
-        lv_obj_align(cb, LV_ALIGN_TOP_RIGHT, -120, 98 + r*80);
-        lv_obj_add_event_cb(cb, cb_event_cb, LV_EVENT_VALUE_CHANGED, (void*)(uintptr_t)(r+1));
+        lv_checkbox_set_text(cb, "");
+        lv_obj_align(cb, LV_ALIGN_TOP_RIGHT, -120, y);
+        lv_obj_add_event_cb(cb, cb_event_cb, LV_EVENT_VALUE_CHANGED, &g_row_enable[r]);
+        if(g_row_enable[r]) lv_obj_add_state(cb, LV_STATE_CHECKED);
     }
 
-    lv_obj_add_flag(s_panel_b, LV_OBJ_FLAG_HIDDEN); // ³õÊ¼Òş²Ø B£¬ÏÔÊ¾ A
+    lv_obj_add_flag(s_panel_b, LV_OBJ_FLAG_HIDDEN);
 }
 
-/* ---------- ÓÒÏÂ½ÇÔ²ĞÎ¡°ÇĞ»»Ò³Ãæ¡±°´Å¥ ---------- */
+/* ---------- å³ä¸‹è§’åœ†å½¢â€œåˆ‡æ¢é¡µé¢â€æŒ‰é’® ---------- */
 static void switch_event_cb(lv_event_t *e)
 {
     LV_UNUSED(e);
@@ -356,14 +515,14 @@ static void switch_event_cb(lv_event_t *e)
     }
 }
 
-/* ========== ¶ÔÍâÈë¿Ú£º´´½¨ÕâÁ½Ò³²¢·ÅÈëÄã¸øµÄ¡°ÖĞ¼äÏÔÊ¾ÇøÓò¡± ========== */
+/* ========== å¯¹å¤–å…¥å£ï¼šåˆ›å»ºè¿™ä¸¤é¡µå¹¶æ”¾å…¥ä½ ç»™çš„â€œä¸­é—´æ˜¾ç¤ºåŒºåŸŸâ€ ========== */
 void ui_left1_create(lv_obj_t *center_container)
 {
-    // Á½¸ö×Ó½çÃæ
+    // ä¸¤ä¸ªå­ç•Œé¢
     build_panel_a(center_container);
     build_panel_b(center_container);
 
-    // ÓÒÏÂ½ÇÔ²ĞÎÇĞ»»°´Å¥£¨·Åµ½ÆÁÄ»×îÉÏ²ãÒÔ±ÜÃâ±»µ×À¸ÕÚµ²£©
+    // å³ä¸‹è§’åœ†å½¢åˆ‡æ¢æŒ‰é’®ï¼ˆæ”¾åˆ°å±å¹•æœ€ä¸Šå±‚ä»¥é¿å…è¢«åº•æ é®æŒ¡ï¼‰
     s_switch_btn = lv_btn_create(lv_layer_top());
     lv_obj_set_size(s_switch_btn, 64, 64);
     lv_obj_set_style_radius(s_switch_btn, LV_RADIUS_CIRCLE, 0);
