@@ -42,6 +42,8 @@ void history_ui_page_down(void);   /* 更新一页 */
 /* ====== 数据接口（供业务层写入） ====== */
 void history_ui_clear_all(void);
 
+void ui_history_page_create(lv_obj_t *center_container);
+
 void history_ui_add_alarm(uint32_t serial,
                           const char *start_time,
                           const char *alarm_type);

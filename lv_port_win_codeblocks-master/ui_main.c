@@ -29,9 +29,9 @@ static void nav_btn_event_cb(lv_event_t *e)
         ui_left1_create(s_center_container);
         break;
 
-            case NAV_IDX_HISTORY:
+    case NAV_IDX_HISTORY:
         lv_obj_clean(s_center_container);
-        history_ui_create(s_center_container);
+        ui_history_page_create(s_center_container);
         break;
 
 

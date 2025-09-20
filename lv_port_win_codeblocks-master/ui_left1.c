@@ -126,10 +126,10 @@ static void page_change(int delta)
     }
     /* 用专用重建函数刷新两个Panel的行 */
     /* 这两个函数在后面定义 */
-    extern void rebuild_panel_1a_rows(void);
-    extern void rebuild_panel_1b_rows(void);
-    rebuild_panel_1a_rows();
-    rebuild_panel_1b_rows(); /* 若B页用到分页数据，视需要可保留；否则可不重建 */
+    extern void rebuild_panel_a_rows(void);
+    extern void rebuild_panel_b_rows(void);
+    rebuild_panel_a_rows();
+    rebuild_panel_b_rows(); /* 若B页用到分页数据，视需要可保留；否则可不重建 */
 
     update_page_label();
     update_page_buttons_state();
@@ -148,7 +148,7 @@ static void key_event_cb(lv_event_t *e)
 }
 
 /* ========== Panel A（重量设置）行重建 ========== */
-void rebuild_panel_1a_rows(void)
+void rebuild_panel_a_rows(void)
 {
     if(!s_panel_a) return;
     lv_obj_clean(s_panel_a);
@@ -203,7 +203,7 @@ void rebuild_panel_1a_rows(void)
 }
 
 /* ========== Panel B（上料/时间）行重建：不显示翻页控件 ========== */
-void rebuild_panel_1b_rows(void)
+void rebuild_panel_b_rows(void)
 {
     if(!s_panel_b) return;
     lv_obj_clean(s_panel_b);
@@ -325,8 +325,8 @@ void ui_left1_set_valve1_count(int n)
     if(s_page_idx >= page_count()) s_page_idx = page_count() - 1;
     if(s_page_idx < 0) s_page_idx = 0;
 
-    rebuild_panel_1a_rows();
-    rebuild_panel_1b_rows();
+    rebuild_panel_a_rows();
+    rebuild_panel_b_rows();
     update_page_label();
     update_page_buttons_state();
 }
@@ -351,7 +351,7 @@ static void build_panel_a(lv_obj_t *parent)
     lv_obj_add_flag(s_panel_a, LV_OBJ_FLAG_CLICK_FOCUSABLE);
     lv_obj_add_event_cb(s_panel_a, key_event_cb, LV_EVENT_KEY, NULL);
 
-    rebuild_panel_1a_rows();
+    rebuild_panel_a_rows();
 }
 
 static void build_panel_b(lv_obj_t *parent)
@@ -363,11 +363,11 @@ static void build_panel_b(lv_obj_t *parent)
     lv_obj_add_flag(s_panel_b, LV_OBJ_FLAG_CLICK_FOCUSABLE);
     lv_obj_add_event_cb(s_panel_b, key_event_cb, LV_EVENT_KEY, NULL);
 
-    rebuild_panel_1b_rows();
+    rebuild_panel_b_rows();
 }
 
 /* ====== 生命周期 ====== */
-void ui_left1_cleanup1(void)
+void ui_left1_cleanup(void)
 {
     ui_keypad_close();
 
@@ -381,7 +381,7 @@ void ui_left1_cleanup1(void)
     s_page_idx = 0;
 }
 
-void ui_left1_create1(lv_obj_t *center_container)
+void ui_left1_create(lv_obj_t *center_container)
 {
     if(!center_container) return;
 
