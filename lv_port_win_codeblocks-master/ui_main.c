@@ -1,6 +1,7 @@
 #include "ui_main.h"
 #include "ui_left1.h"
 #include "ui_history.h"
+#include "ui_setting.h"
 
 #include <stdint.h>
 
@@ -9,6 +10,7 @@ static lv_obj_t *s_center_container = NULL;
 
 /** 底部导航栏按钮索引定义。 */
 #define NAV_IDX_FIRST_PAGE 0
+#define NAV_IDX_SETTING   1
 #define NAV_IDX_HISTORY    3  /**< 底部导航栏从右往左数第二个按钮。 */
 
 /**
@@ -22,21 +24,39 @@ static void nav_btn_event_cb(lv_event_t *e)
     }
 
     ui_left1_cleanup();
+       settings_ui_destroy();
+
+           lv_obj_clean(s_center_container);
 
     switch(idx) {
     case NAV_IDX_FIRST_PAGE:
-        lv_obj_clean(s_center_container);
+ //       lv_obj_clean(s_center_container);
         ui_left1_create(s_center_container);
         break;
 
+   case NAV_IDX_SETTING:
+    ui_left1_cleanup();              // 先清理左页的顶层控件（见下一条）
+    LV_LOG_USER("1");
+    settings_ui_destroy();           // 防止残留
+    LV_LOG_USER("2");
+    lv_obj_clean(s_center_container);
+    LV_LOG_USER("3");
+    settings_ui_create(s_center_container);
+    LV_LOG_USER("4");
+    settings_ui_show_menu();         // ★ 显示 6 按钮菜单
+    LV_LOG_USER("5");
+        break;
+
+
+
     case NAV_IDX_HISTORY:
-        lv_obj_clean(s_center_container);
+ //       lv_obj_clean(s_center_container);
         ui_history_page_create(s_center_container);
         break;
 
 
     default:
-        lv_obj_clean(s_center_container);
+  //      lv_obj_clean(s_center_container);
         lv_obj_t *hint = lv_label_create(s_center_container);
         lv_label_set_text_fmt(hint, "Page %d (TBD)", (int)idx + 1);
         lv_obj_center(hint);
@@ -56,6 +76,7 @@ static void menu_btn_event_cb(lv_event_t *e)
     }
 
     ui_left1_cleanup();
+        settings_ui_destroy();
     lv_obj_clean(s_center_container);
 }
 
@@ -94,6 +115,8 @@ void ui_main_create(void)
             lv_label_set_text(label, "History");
         } else if(i == NAV_IDX_FIRST_PAGE) {
             lv_label_set_text(label, "Main");
+        } else if(i == NAV_IDX_SETTING) {
+            lv_label_set_text(label, "Settings");
         } else {
             lv_label_set_text_fmt(label, "Btn%d", i + 1);
         }

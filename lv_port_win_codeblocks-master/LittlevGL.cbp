@@ -1376,6 +1376,10 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="ui_main.h" />
+		<Unit filename="ui_setting.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ui_setting.h" />
 		<Extensions>
 			<DoxyBlocks>
 				<comment_style block="0" line="0" />
