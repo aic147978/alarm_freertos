@@ -18,4 +18,32 @@ void ui_left1_set_valve_count(int n);
  */
 void ui_left1_cleanup(void);
 
+/* ===== ui_left1.h: 对外数据读取接口 ===== */
+
+/* 有效行数（两列共用同一计数） */
+int ui_left1_get_valve1_count(void);
+
+/* —— A 面：左右列 set/time（单位：kg / s），返回内部只读指针 —— */
+/* 注意：指针长度为 MAX_VALVES，有效元素个数请配合 ui_left1_get_valve1_count() 使用 */
+const int* ui_left1_left_set_data(void);
+const int* ui_left1_left_time_data(void);
+const int* ui_left1_right_set_data(void);
+const int* ui_left1_right_time_data(void);
+
+/* —— B 面：start/end（秒）与每行启用开关 —— */
+const int*  ui_left1_start_time_data(void);
+const int*  ui_left1_end_time_data(void);
+const bool* ui_left1_row_enable_data(void);
+
+/* （可选）把当前页所有行拷贝到你的缓冲区里，避免直接用指针 */
+int ui_left1_snapshot_pageA(int first_index, int* l_set, int* l_time,
+                             int* r_set, int* r_time, int max_n);
+
+int ui_left1_snapshot_pageB(int first_index, int* start_s, int* end_s,
+                             bool* enabled, int max_n);
+
+
 #endif /* UI_LEFT1_H */
+
+
+

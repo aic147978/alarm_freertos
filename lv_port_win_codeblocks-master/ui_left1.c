@@ -50,6 +50,53 @@ static int  s_start_sec[MAX_VALVES]    = {0};
 static int  s_end_sec[MAX_VALVES]      = {0};
 static bool s_row_enable[MAX_VALVES]   = {false};
 
+
+/* ===== 对外数据读取：实现部分 ===== */
+
+int ui_left1_get_valve1_count(void) {
+    return s_valve_count;
+}
+
+const int* ui_left1_left_set_data(void)     { return s_left_set;     }
+const int* ui_left1_left_time_data(void)    { return s_left_time_s;  }
+const int* ui_left1_right_set_data(void)    { return s_right_set;    }
+const int* ui_left1_right_time_data(void)   { return s_right_time_s; }
+const int* ui_left1_start_time_data(void)   { return s_start_sec;    }
+const int* ui_left1_end_time_data(void)     { return s_end_sec;      }
+const bool* ui_left1_row_enable_data(void)  { return s_row_enable;   }
+
+/* 复制当前页（或任意 first_index 起连续数据）的快照到调用者缓冲区，返回拷贝条数 */
+int ui_left1_snapshot_pageA(int first_index, int* l_set, int* l_time,
+                            int* r_set, int* r_time, int max_n)
+{
+    if(first_index < 0) first_index = 0;
+    if(first_index >= s_valve_count) return 0;
+    int n = s_valve_count - first_index;
+    if(n > max_n) n = max_n;
+    for(int i=0;i<n;i++){
+        if(l_set)  l_set[i]  = s_left_set[first_index + i];
+        if(l_time) l_time[i] = s_left_time_s[first_index + i];
+        if(r_set)  r_set[i]  = s_right_set[first_index + i];
+        if(r_time) r_time[i] = s_right_time_s[first_index + i];
+    }
+    return n;
+}
+
+int ui_left1_snapshot_pageB(int first_index, int* start_s, int* end_s,
+                            bool* enabled, int max_n)
+{
+    if(first_index < 0) first_index = 0;
+    if(first_index >= s_valve_count) return 0;
+    int n = s_valve_count - first_index;
+    if(n > max_n) n = max_n;
+    for(int i=0;i<n;i++){
+        if(start_s) start_s[i] = s_start_sec[first_index + i];
+        if(end_s)   end_s[i]   = s_end_sec[first_index + i];
+        if(enabled) enabled[i] = s_row_enable[first_index + i];
+    }
+    return n;
+}
+
 /* 与 ui_keypad 交互的“绑定条目”，每一行一个，负责把“变量 ↔ label 显示”绑定起来 */
 static ui_bind_entry_t s_left_set_entries[MAX_VALVES];
 static ui_bind_entry_t s_left_time_entries[MAX_VALVES];
