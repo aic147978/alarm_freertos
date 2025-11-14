@@ -1,9 +1,36 @@
-#ifndef _MYGUI_H
-#define _MYGUI_H
+#ifndef MYGUI_H
+#define MYGUI_H
 
-/**
- * @brief åº”ç”¨å›¾å½¢ç•Œé¢çš„ç»Ÿä¸€å…¥å£ã€‚
+#include "lvgl.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ¹©Íâ²¿µ÷ÓÃµÄ¼ò½à½Ó¿Ú£º
+ * - myGUI_create()  : ÔÚµ±Ç°»î¶¯ÆÁ(lv_scr_act)ÉÏ´´½¨ÕûÌ× UI£¨ÈôÒÑ´´½¨ÔòºöÂÔ£©
+ * - myGUI_destroy() : É¾³ıÕûÌ× UI£¨¿ÉÖØ¸´´´½¨/Ïú»Ù£©
+ * - myGUI_show(id)  : ÇĞ»»µ½µ×²¿µÄ 1..5 ºÅ×Ó½çÃæ£¨3 ÊÇ Home£©
+ * - myGUI_home()    : ¿ìËÙÇĞµ½ Home(3)
+ *
+ * ÊÓÍ¼ ID ËµÃ÷£¨Óë app_ui.h ±£³ÖÒ»ÖÂ£©:
+ *   1 ¡ú ×Ó½çÃæ1£¨Ä¬ÈÏ½øÈë 1_1 weightset£¬¿ÉÔÚÓÒÏÂ½Ç°´Å¥ÇĞµ½ 1_2 timeset£©
+ *   2 ¡ú ×Ó½çÃæ2£¨Õ¼Î»£©
+ *   3 ¡ú ×Ó½çÃæ3£¨Home£¬ÖĞ¼äÔ²ĞÎ°´Å¥£©
+ *   4 ¡ú ×Ó½çÃæ4£¨Õ¼Î»£©
+ *   5 ¡ú ×Ó½çÃæ5£¨Õ¼Î»£©
  */
-void my_GUI(void);
 
-#endif // _MYGUI_H
+void myGUI_create(void);
+void myGUI_destroy(void);
+
+/* id È¡Öµ 1..5£¨·Ç·¨Öµ½«±»ºöÂÔ£© */
+void myGUI_show(uint8_t id);
+
+/* µÈ¼ÛÓÚ myGUI_show(3) */
+static inline void myGUI_home(void) { myGUI_show(3); }
+
+#ifdef __cplusplus
+}
+#endif
+#endif /* MYGUI_H */

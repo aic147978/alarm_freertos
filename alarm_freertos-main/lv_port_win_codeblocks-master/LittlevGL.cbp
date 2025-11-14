@@ -40,6 +40,14 @@
 			<Add option="-Wall" />
 			<Add directory="." />
 		</Compiler>
+		<Unit filename="app_ui.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="app_ui.h" />
+		<Unit filename="keyboard.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="keyboard.h" />
 		<Unit filename="lv_conf.h" />
 		<Unit filename="lv_demo_conf.h" />
 		<Unit filename="lv_demos/src/lv_demo.h" />
@@ -1360,30 +1368,22 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="myGUI.h" />
-		<Unit filename="ui_history.c">
+		<Unit filename="ui1_1_weightset.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="ui_history.h" />
-		<Unit filename="ui_keypad.c">
+		<Unit filename="ui1_1_weightset.h" />
+		<Unit filename="ui1_2_timeset.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="ui_keypad.h" />
-		<Unit filename="ui_left1.c">
+		<Unit filename="ui1_2_timeset.h" />
+		<Unit filename="ui4_1_weighthistory.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="ui_left1.h" />
-		<Unit filename="ui_main.c">
+		<Unit filename="ui4_1_weighthistory.h" />
+		<Unit filename="ui4_2_alarmhistory.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="ui_main.h" />
-		<Unit filename="ui_manual.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="ui_manual.h" />
-		<Unit filename="ui_setting.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="ui_setting.h" />
+		<Unit filename="ui4_2_alarmhistory.h" />
 		<Extensions>
 			<DoxyBlocks>
 				<comment_style block="0" line="0" />
